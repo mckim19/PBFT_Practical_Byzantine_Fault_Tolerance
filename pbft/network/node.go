@@ -62,9 +62,9 @@ func NewNode(nodeID string) *Node {
 		},
 
 		// Channels
-		MsgEntrance: make(chan interface{}),
-		MsgDelivery: make(chan interface{}),
-		Alarm: make(chan bool),
+		MsgEntrance: make(chan interface{}, len(NodeTable)),
+		MsgDelivery: make(chan interface{}, len(NodeTable)),
+		Alarm: make(chan bool, len(NodeTable)),
 	}
 
 	// Start message dispatcher
