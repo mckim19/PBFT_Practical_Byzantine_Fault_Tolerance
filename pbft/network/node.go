@@ -37,15 +37,17 @@ const ResolvingTimeDuration = time.Millisecond * 1000 // 1 second.
 func NewNode(nodeID string) *Node {
 	const viewID = 10000000000 // temporary.
 
+	var nodeTable = map[string]string{
+		"Apple": "localhost:1111",
+		"MS": "localhost:1112",
+		"Google": "localhost:1113",
+		"IBM": "localhost:1114",
+	}
+
+	// Hard-coded for test.
 	node := &Node{
-		// Hard-coded for test.
 		NodeID: nodeID,
-		NodeTable: map[string]string{
-			"Apple": "localhost:1111",
-			"MS": "localhost:1112",
-			"Google": "localhost:1113",
-			"IBM": "localhost:1114",
-		},
+		NodeTable: nodeTable,
 		View: &View{
 			ID: viewID,
 			Primary: "Apple",
@@ -62,9 +64,9 @@ func NewNode(nodeID string) *Node {
 		},
 
 		// Channels
-		MsgEntrance: make(chan interface{}, len(NodeTable)),
-		MsgDelivery: make(chan interface{}, len(NodeTable)),
-		Alarm: make(chan bool, len(NodeTable)),
+		MsgEntrance: make(chan interface{}, len(nodeTable)),
+		MsgDelivery: make(chan interface{}, len(nodeTable)),
+		Alarm: make(chan bool, len(nodeTable)),
 	}
 
 	// Start message dispatcher
