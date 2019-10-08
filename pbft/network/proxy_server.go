@@ -2,6 +2,7 @@ package network
 
 import (
 	"net/http"
+
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
 	"fmt"
@@ -93,7 +94,15 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 	server.node.GetReply(&msg)
 }
 
-func send(url string, msg []byte) {
+func send(url string, msg []byte) error {
 	buff := bytes.NewBuffer(msg)
-	http.Post("http://" + url, "application/json", buff)
+	c := &http.Client{}
+
+	resp, err := c.Post("http://" + url, "application/json", buff)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
 }

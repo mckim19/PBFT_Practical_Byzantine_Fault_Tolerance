@@ -95,13 +95,22 @@ func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 			continue
 		}
 
-		send(url + path, jsonMsg)
+		err = send(url + path, jsonMsg)
+		if err != nil {
+			errorMap[nodeID] = err
+			continue
+		}
 	}
 
 	if len(errorMap) == 0 {
 		return nil
 	} else {
-		return errorMap
+		// TODO: we currently assume all nodes are alive
+		//return errorMap
+		for nodeID, err := range errorMap {
+			fmt.Printf("[%s]: %s\n", nodeID, err)
+		}
+		panic("Broadcast ERROR!!!")
 	}
 }
 
