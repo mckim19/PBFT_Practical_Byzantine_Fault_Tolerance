@@ -68,6 +68,7 @@ func (server *Server) getPrepare(writer http.ResponseWriter, request *http.Reque
 		fmt.Println(err)
 		return
 	}
+	fmt.Println(msg)
 
 	server.node.MsgEntrance <- &msg
 }

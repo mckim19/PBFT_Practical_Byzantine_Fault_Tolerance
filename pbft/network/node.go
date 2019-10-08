@@ -65,8 +65,8 @@ func NewNode(nodeID string) *Node {
 
 		// Channels
 		MsgEntrance: make(chan interface{}, len(nodeTable)),
-		MsgDelivery: make(chan interface{}, len(nodeTable)),
-		Alarm: make(chan bool, len(nodeTable)),
+		MsgDelivery: make(chan interface{}, len(nodeTable) * 3),
+		Alarm: make(chan bool, 1),
 	}
 
 	// Start message dispatcher
@@ -95,6 +95,7 @@ func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 			continue
 		}
 
+		fmt.Println(nodeID)
 		err = send(url + path, jsonMsg)
 		if err != nil {
 			errorMap[nodeID] = err
@@ -129,6 +130,9 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
 	send(node.NodeTable[node.View.Primary] + "/reply", jsonMsg)
 
+	// Notify the node can handle the next request messages.
+	node.CurrentState = nil
+
 	return nil
 }
 
@@ -138,7 +142,7 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogMsg(reqMsg)
 
 	// Create a new state for the new consensus.
-	err := node.createStateForNewConsensus()
+	err := node.createStateForNewConsensus(reqMsg.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -166,7 +170,7 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	LogMsg(prePrepareMsg)
 
 	// Create a new state for the new consensus.
-	err := node.createStateForNewConsensus()
+	err := node.createStateForNewConsensus(prePrepareMsg.RequestMsg.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -183,6 +187,10 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 		LogStage("Pre-prepare", true)
 		node.Broadcast(prePareMsg, "/prepare")
 		LogStage("Prepare", false)
+
+		// Add PREPARE pseudo-message from Primary node
+		// because Primary node does not send the PREPARE message.
+		node.CurrentState.MsgLogs.PrepareMsgs[node.View.Primary] = nil
 	}
 
 	return nil
@@ -192,7 +200,7 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
 	// Skip surplus messages if PrePrepared stage's already passed.
-	if node.CurrentState.CurrentStage != consensus.PrePrepared {
+	if node.CurrentState == nil || node.CurrentState.CurrentStage != consensus.PrePrepared {
 		return nil
 	}
 
@@ -217,7 +225,7 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
 
 	// Skip surplus messages if Prepared stage's already passed.
-	if node.CurrentState.CurrentStage != consensus.Prepared {
+	if node.CurrentState == nil || node.CurrentState.CurrentStage != consensus.Prepared {
 		return nil
 	}
 
@@ -249,10 +257,10 @@ func (node *Node) GetReply(msg *consensus.ReplyMsg) {
 	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
 }
 
-func (node *Node) createStateForNewConsensus() error {
+func (node *Node) createStateForNewConsensus(timeStamp int64) error {
 	// Check if there is an ongoing consensus process.
 	if node.CurrentState != nil {
-		return errors.New("another consensus is ongoing")
+		return errors.New("Discard Requests: another consensus is ongoing")
 	}
 
 	// Get the last sequence ID
@@ -260,7 +268,15 @@ func (node *Node) createStateForNewConsensus() error {
 	if len(node.CommittedMsgs) == 0 {
 		lastSequenceID = -1
 	} else {
-		lastSequenceID = node.CommittedMsgs[len(node.CommittedMsgs) - 1].SequenceID
+		// From TOCS: To guarantee exactly once semantics,
+		// replicas discard requests whose timestamp is lower than
+		// the timestamp in the last reply they sent to the client.
+		lastCommitMsg := node.CommittedMsgs[len(node.CommittedMsgs) - 1]
+		if timeStamp <= lastCommitMsg.Timestamp {
+			// TODO: Delete the messages efficiently.
+			return errors.New("Discard Requests: old request")
+		}
+		lastSequenceID = lastCommitMsg.SequenceID
 	}
 
 	// Create a new state for this new consensus process in the Primary
@@ -328,6 +344,7 @@ func (node *Node) routeMsg(msg interface{}) []error {
 		}
 	case *consensus.VoteMsg:
 		if msg.(*consensus.VoteMsg).MsgType == consensus.PrepareMsg {
+			fmt.Println("Prepare route")
 			if node.CurrentState == nil || node.CurrentState.CurrentStage != consensus.PrePrepared {
 				node.MsgBuffer.PrepareMsgs = append(node.MsgBuffer.PrepareMsgs, msg.(*consensus.VoteMsg))
 			} else {
@@ -345,6 +362,7 @@ func (node *Node) routeMsg(msg interface{}) []error {
 				node.MsgDelivery <- msgs
 			}
 		} else if msg.(*consensus.VoteMsg).MsgType == consensus.CommitMsg {
+			fmt.Println("Commit route")
 			if node.CurrentState == nil || node.CurrentState.CurrentStage != consensus.Prepared {
 				node.MsgBuffer.CommitMsgs = append(node.MsgBuffer.CommitMsgs, msg.(*consensus.VoteMsg))
 			} else {
@@ -373,6 +391,8 @@ func (node *Node) routeMsgWhenAlarmed() []error {
 		if len(node.MsgBuffer.ReqMsgs) != 0 {
 			msgs := make([]*consensus.RequestMsg, len(node.MsgBuffer.ReqMsgs))
 			copy(msgs, node.MsgBuffer.ReqMsgs)
+
+			node.MsgBuffer.ReqMsgs = make([]*consensus.RequestMsg, 0)
 
 			node.MsgDelivery <- msgs
 		}

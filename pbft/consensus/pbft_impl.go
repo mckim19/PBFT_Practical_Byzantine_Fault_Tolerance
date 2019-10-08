@@ -29,9 +29,10 @@ const (
 )
 
 // f: # of Byzantine faulty node
-// f = (n­1) / 3
+// f = (n-1) / 3
 // n = 4, in this case.
 const f = 1
+const numCommittee = 3*f+1
 
 // lastSequenceID will be -1 if there is no last sequence ID.
 func CreateState(viewID int64, lastSequenceID int64) *State {
@@ -87,8 +88,8 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	state.MsgLogs.ReqMsg = prePrepareMsg.RequestMsg
 
 	// Verify if v, n(a.k.a. sequenceID), d are correct.
-	if !state.verifyMsg(prePrepareMsg.ViewID, prePrepareMsg.SequenceID, prePrepareMsg.Digest) {
-		return nil, errors.New("pre-prepare message is corrupted")
+	if err := state.verifyMsg(prePrepareMsg.ViewID, prePrepareMsg.SequenceID, prePrepareMsg.Digest); err != nil {
+		return nil, errors.New("pre-prepare message is corrupted: " + err.Error() + " (operation: " + prePrepareMsg.RequestMsg.Operation + ")")
 	}
 
 	// Change the stage to pre-prepared.
@@ -104,8 +105,8 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 
 
 func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
-	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
-		return nil, errors.New("prepare message is corrupted")
+	if err := state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest); err != nil {
+		return nil, errors.New("prepare message is corrupted: " + err.Error() + " (nodeID: " + prepareMsg.NodeID + ")")
 	}
 
 	// Append msg to its logs
@@ -130,8 +131,8 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 }
 
 func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
-	if !state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest) {
-		return nil, nil, errors.New("commit message is corrupted")
+	if err := state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest); err != nil {
+		return nil, nil, errors.New("commit message is corrupted: " + err.Error() + " (nodeID: " + commitMsg.NodeID + ")")
 	}
 
 	// Append msg to its logs
@@ -158,52 +159,62 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	return nil, nil, nil
 }
 
-func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) bool {
+func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) error {
 	// Wrong view. That is, wrong configurations of peers to start the consensus.
 	if state.ViewID != viewID {
-		return false
+		return fmt.Errorf("state.ViewID = %d, viewID = %d", state.ViewID, viewID)
 	}
 
 	// Check if the Primary sent fault sequence number. => Faulty primary.
 	// TODO: adopt upper/lower bound check.
 	if state.LastSequenceID != -1 {
 		if state.LastSequenceID >= sequenceID {
-			return false
+			return fmt.Errorf("state.LastSequenceID = %d, sequenceID = %d", state.LastSequenceID, sequenceID)
 		}
 	}
 
 	digest, err := digest(state.MsgLogs.ReqMsg)
 	if err != nil {
-		fmt.Println(err)
-		return false
+		return err
 	}
 
 	// Check digest.
 	if digestGot != digest {
-		return false
+		return fmt.Errorf("digest = %s, digestGot = %s", digest, digestGot)
 	}
 
-	return true
+	return nil
 }
 
+// From TOCS: Each replica collects messages until it has a quorum certificate
+// with the PRE-PREPARE and 2*f matching PREPARE messages for sequence number n,
+// view v, and request m. We call this certificate the prepared certificate
+// and we say that the replica "prepared" the request.
+// TODO: async protocol
 func (state *State) prepared() bool {
 	if state.MsgLogs.ReqMsg == nil {
 		return false
 	}
 
-	if len(state.MsgLogs.PrepareMsgs) < 2*f {
+	if len(state.MsgLogs.PrepareMsgs) < numCommittee - 1 {
 		return false
 	}
 
 	return true
 }
 
+// From TOCS: Each replica collects messages until it has a quorum certificate
+// with 2*f+1 COMMIT messages for the same sequence number n and view v
+// from different replicas (including itself). We call this certificate
+// the committed certificate and say that the request is "committed"
+// by the replica when it has both the prepared and committed certificates.
+// TODO: async protocol
 func (state *State) committed() bool {
 	if !state.prepared() {
 		return false
 	}
 
-	if len(state.MsgLogs.CommitMsgs) < 2*f {
+	if len(state.MsgLogs.CommitMsgs) < numCommittee - 1 {
 		return false
 	}
 
