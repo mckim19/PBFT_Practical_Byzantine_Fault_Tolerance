@@ -1,5 +1,7 @@
 package consensus
 
+// Messages are SOSP style.
+
 type RequestMsg struct {
 	Timestamp  int64  `json:"timestamp"`
 	ClientID   string `json:"clientID"`
