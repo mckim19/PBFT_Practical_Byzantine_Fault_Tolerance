@@ -78,6 +78,12 @@ func NewNode(nodeID string) *Node {
 	// Start message resolver
 	go node.resolveMsg()
 
+	// TODO:
+	// From TOCS: The backups check the sequence numbers assigned by
+	// the primary and use timeouts to detect when it stops.
+	// They trigger view changes to select a new primary when it
+	// appears that the current one has failed.
+
  	return node
 }
 
@@ -140,6 +146,8 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 // Consensus start procedure for the Primary.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogMsg(reqMsg)
+
+	// TODO: Check the request message has a right form.
 
 	// Create a new state for the new consensus.
 	err := node.createStateForNewConsensus(reqMsg.Timestamp)

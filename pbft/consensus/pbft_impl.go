@@ -49,18 +49,20 @@ func CreateState(viewID int64, lastSequenceID int64) *State {
 }
 
 func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) {
-	// `sequenceID` will be the index of this message.
-	sequenceID := time.Now().UnixNano()
-
-	// Find the unique and largest number for the sequence ID
-	if state.LastSequenceID != -1 {
-		for state.LastSequenceID >= sequenceID {
-			sequenceID += 1
+	// From TOCS: The primary picks the "ordering" for execution of
+	// operations requested by clients. It does this by assigning
+	// the next available `sequence number` to a request and sending
+	// this assignment to the backups.
+	for {
+		sequenceID := time.Now().UnixNano();
+		if state.LastSequenceID < sequenceID {
+			request.SequenceID = sequenceID
+			break
 		}
+		// TODO: From TOCS: no sequence numbers are skipped but
+		// when there are view changes some sequence numbers
+		// may be assigned to null requests whose execution is a no-op.
 	}
-
-	// Assign a new sequence ID to the request message object.
-	request.SequenceID = sequenceID
 
 	// Save ReqMsgs to its logs.
 	state.MsgLogs.ReqMsg = request
@@ -77,7 +79,7 @@ func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) 
 
 	return &PrePrepareMsg{
 		ViewID: state.ViewID,
-		SequenceID: sequenceID,
+		SequenceID: request.SequenceID,
 		Digest: digest,
 		RequestMsg: request,
 	}, nil
