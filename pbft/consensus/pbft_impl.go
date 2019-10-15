@@ -19,14 +19,6 @@ type MsgLogs struct {
 	CommitMsgs    map[string]*VoteMsg
 }
 
-type Stage int
-const (
-	Idle        Stage = iota // Node is created successfully, but the consensus process is not started yet.
-	PrePrepared              // The ReqMsgs is processed successfully. The node is ready to head to the Prepare stage.
-	Prepared                 // Same with `prepared` stage explained in the original paper.
-	Committed                // Same with `committed-local` stage explained in the original paper.
-)
-
 // f: # of Byzantine faulty node
 // f = (n-1) / 3
 // n = 4, in this case.
@@ -137,9 +129,6 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
 
 	if state.committed() {
-		// This node executes the requested operation locally and gets the result.
-		result := "Executed"
-
 		// Change the stage to prepared.
 		state.CurrentStage = Committed
 
@@ -147,11 +136,26 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 			ViewID: state.ViewID,
 			Timestamp: state.MsgLogs.ReqMsg.Timestamp,
 			ClientID: state.MsgLogs.ReqMsg.ClientID,
-			Result: result,
+			// Nodes must execute the requested operation
+			// locally and assign the result into reply message,
+			// with considering their operation ordering policy.
+			Result: "",
 		}, state.MsgLogs.ReqMsg, nil
 	}
 
 	return nil, nil, nil
+}
+
+func (state *State) GetStage() Stage {
+	return state.CurrentStage
+}
+
+func (state *State) GetViewID() int64 {
+	return state.ViewID
+}
+
+func (state *State) GetLastSequenceID() int64 {
+	return state.LastSequenceID
 }
 
 func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) error {

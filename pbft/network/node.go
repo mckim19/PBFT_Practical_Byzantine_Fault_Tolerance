@@ -13,7 +13,7 @@ type Node struct {
 	NodeID        string
 	NodeTable     []*NodeInfo
 	View          *View
-	CurrentState  *consensus.State
+	States        map[int64]*consensus.State // key: sequenceID, value: state
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
 	MsgBuffer     *MsgBuffer
 	MsgEntrance   chan interface{}
@@ -39,11 +39,13 @@ type MsgBuffer struct {
 }
 
 type View struct {
-	ID      int64
-	Primary *NodeInfo
+	ID             int64
+	LastSequenceID int64
+	Primary        *NodeInfo
 }
 
-const ResolvingTimeDuration = time.Millisecond * 1000 // 1 second.
+// Maximum delay between dispatching and delivering messages.
+const ResolvingTimeDuration = time.Millisecond * 1000
 
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
@@ -52,7 +54,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		View: &View{},
 
 		// Consensus-related struct
-		CurrentState: nil,
+		States: make(map[int64]*consensus.State),
 		CommittedMsgs: make([]*consensus.RequestMsg, 0),
 		MsgBuffer: &MsgBuffer{
 			ReqMsgsMutex:        sync.Mutex{},
@@ -141,13 +143,9 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
 	send(node.View.Primary.Url + "/reply", jsonMsg)
 
-	// Notify the node can handle the next request messages.
-	node.CurrentState = nil
-
 	return nil
 }
 
-// GetReq can be called when the node's CurrentState is nil.
 // Consensus start procedure for the Primary.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogMsg(reqMsg)
@@ -155,19 +153,23 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	// TODO: Check the request message has a right form.
 
 	// Create a new state for the new consensus.
-	err := node.createStateForNewConsensus(reqMsg.Timestamp)
+	state, err := node.createStateForNewConsensus(reqMsg.Timestamp)
 	if err != nil {
 		return err
 	}
 
-	// Start the consensus process.
-	prePrepareMsg, err := node.CurrentState.StartConsensus(reqMsg)
+	// Make the state prepared.
+	prePrepareMsg, err := node.startConsensus(state, reqMsg)
 	if err != nil {
 		return err
 	}
 
-	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %d)",
-		 node.CurrentState.ViewID, node.View.Primary.NodeID), false)
+	// Register state into node and update last sequence number.
+	node.States[prePrepareMsg.SequenceID] = state
+	node.View.LastSequenceID = reqMsg.SequenceID
+
+	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
+		 state.ViewID, node.View.Primary.NodeID), false)
 
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
@@ -178,20 +180,26 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	return nil
 }
 
-// GetPrePrepare can be called when the node's CurrentState is nil.
 // Consensus start procedure for normal participants.
 func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	LogMsg(prePrepareMsg)
 
 	// Create a new state for the new consensus.
-	err := node.createStateForNewConsensus(prePrepareMsg.RequestMsg.Timestamp)
+	state, err := node.createStateForNewConsensus(prePrepareMsg.RequestMsg.Timestamp)
 	if err != nil {
 		return err
 	}
 
-	prePareMsg, err := node.CurrentState.PrePrepare(prePrepareMsg)
+	// Make the state prepared.
+	prePareMsg, err := node.prePrepare(state, prePrepareMsg)
 	if err != nil {
 		return err
+	}
+
+	// Register state into node and update last sequence number.
+	node.States[prePrepareMsg.SequenceID] = state
+	if node.View.LastSequenceID < prePrepareMsg.SequenceID {
+		node.View.LastSequenceID = prePrepareMsg.SequenceID
 	}
 
 	if prePareMsg != nil {
@@ -204,7 +212,7 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 
 		// !!!HACK!!!: Add PREPARE pseudo-message from Primary node
 		// because Primary node does not send the PREPARE message.
-		node.CurrentState.MsgLogs.PrepareMsgs[node.View.Primary.NodeID] = nil
+		state.MsgLogs.PrepareMsgs[node.View.Primary.NodeID] = nil
 	}
 
 	return nil
@@ -213,7 +221,7 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
-	commitMsg, err := node.CurrentState.Prepare(prepareMsg)
+	commitMsg, err := node.prepare(node.States[prepareMsg.SequenceID], prepareMsg)
 	if err != nil {
 		return err
 	}
@@ -233,7 +241,7 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
 
-	replyMsg, committedMsg, err := node.CurrentState.Commit(commitMsg)
+	replyMsg, committedMsg, err := node.commit(node.States[commitMsg.SequenceID], commitMsg)
 	if err != nil {
 		return err
 	}
@@ -242,6 +250,12 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 		if committedMsg == nil {
 			return errors.New("committed message is nil, even though the reply message is not nil")
 		}
+
+		// TODO: fill the result field, after all execution for
+		// other states which the sequence number is smaller,
+		// i.e., the sequence number of the last committed message is
+		// one smaller than the current message.
+		replyMsg.Result = "Executed"
 
 		// Attach node ID to the message
 		replyMsg.NodeID = node.NodeID
@@ -261,36 +275,14 @@ func (node *Node) GetReply(msg *consensus.ReplyMsg) {
 	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
 }
 
-func (node *Node) createStateForNewConsensus(timeStamp int64) error {
-	// Check if there is an ongoing consensus process.
-	if node.CurrentState != nil {
-		return errors.New("Discard Requests: another consensus is ongoing")
-	}
-
-	// Get the last sequence ID
-	var lastSequenceID int64
-	if len(node.CommittedMsgs) == 0 {
-		lastSequenceID = -1
-	} else {
-		// From TOCS: To guarantee exactly once semantics,
-		// replicas discard requests whose timestamp is lower than
-		// the timestamp in the last reply they sent to the client.
-		lastCommitMsg := node.CommittedMsgs[len(node.CommittedMsgs) - 1]
-/*
-		if timeStamp <= lastCommitMsg.Timestamp {
-			// TODO: Delete the messages efficiently.
-			return errors.New("Discard Requests: old request")
-		}
-*/
-		lastSequenceID = lastCommitMsg.SequenceID
-	}
-
-	// Create a new state for this new consensus process in the Primary
-	node.CurrentState = consensus.CreateState(node.View.ID, lastSequenceID)
+func (node *Node) createStateForNewConsensus(timeStamp int64) (*consensus.State, error) {
+	// TODO: From TOCS: To guarantee exactly once semantics,
+	// replicas discard requests whose timestamp is lower than
+	// the timestamp in the last reply they sent to the client.
 
 	LogStage("Create the replica status", true)
 
-	return nil
+	return consensus.CreateState(node.View.ID, node.View.LastSequenceID), nil
 }
 
 func (node *Node) dispatchMsg() {
@@ -323,9 +315,6 @@ func (node *Node) routeMsg(msg interface{}) []error {
 		node.MsgBuffer.ReqMsgsMutex.Lock()
 		node.MsgBuffer.ReqMsgs = append(node.MsgBuffer.ReqMsgs, msg.(*consensus.RequestMsg))
 		node.MsgBuffer.ReqMsgsMutex.Unlock()
-		if node.CurrentState == nil {
-			node.deliveryRequestMsgs()
-		}
 	case *consensus.PrePrepareMsg:
 		// Skip if the node is primary
 		if (node.NodeID == node.View.Primary.NodeID) {
@@ -335,26 +324,17 @@ func (node *Node) routeMsg(msg interface{}) []error {
 		node.MsgBuffer.PrePrepareMsgsMutex.Lock()
 		node.MsgBuffer.PrePrepareMsgs = append(node.MsgBuffer.PrePrepareMsgs, msg.(*consensus.PrePrepareMsg))
 		node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
-		if node.CurrentState == nil {
-			node.deliveryPrePrepareMsgs()
-		}
 	case *consensus.VoteMsg:
 		if msg.(*consensus.VoteMsg).MsgType == consensus.PrepareMsg {
 			fmt.Println("Prepare route")
 			node.MsgBuffer.PrepareMsgsMutex.Lock()
 			node.MsgBuffer.PrepareMsgs = append(node.MsgBuffer.PrepareMsgs, msg.(*consensus.VoteMsg))
 			node.MsgBuffer.PrepareMsgsMutex.Unlock()
-			if node.CurrentState != nil && node.CurrentState.CurrentStage == consensus.PrePrepared {
-				node.deliveryPrepareMsgs()
-			}
 		} else if msg.(*consensus.VoteMsg).MsgType == consensus.CommitMsg {
 			fmt.Println("Commit route")
 			node.MsgBuffer.CommitMsgsMutex.Lock()
 			node.MsgBuffer.CommitMsgs = append(node.MsgBuffer.CommitMsgs, msg.(*consensus.VoteMsg))
 			node.MsgBuffer.CommitMsgsMutex.Unlock()
-			if node.CurrentState != nil && node.CurrentState.CurrentStage == consensus.Prepared {
-				node.deliveryCommitMsgs()
-			}
 		}
 	}
 
@@ -362,29 +342,24 @@ func (node *Node) routeMsg(msg interface{}) []error {
 }
 
 func (node *Node) routeMsgWhenAlarmed() []error {
-	if node.CurrentState == nil {
-		// Check ReqMsgs, send them.
-		if len(node.MsgBuffer.ReqMsgs) != 0 {
-			node.deliveryRequestMsgs()
-		}
+	// Check ReqMsgs, send them.
+	if len(node.MsgBuffer.ReqMsgs) != 0 {
+		node.deliveryRequestMsgs()
+	}
 
-		// Check PrePrepareMsgs, send them.
-		if len(node.MsgBuffer.PrePrepareMsgs) != 0 {
-			node.deliveryPrePrepareMsgs()
-		}
-	} else {
-		switch node.CurrentState.CurrentStage {
-		case consensus.PrePrepared:
-			// Check PrepareMsgs, send them.
-			if len(node.MsgBuffer.PrepareMsgs) != 0 {
-				node.deliveryPrepareMsgs()
-			}
-		case consensus.Prepared:
-			// Check CommitMsgs, send them.
-			if len(node.MsgBuffer.CommitMsgs) != 0 {
-				node.deliveryCommitMsgs()
-			}
-		}
+	// Check PrePrepareMsgs, send them.
+	if len(node.MsgBuffer.PrePrepareMsgs) != 0 {
+		node.deliveryPrePrepareMsgs()
+	}
+
+	// Check PrepareMsgs, send them.
+	if len(node.MsgBuffer.PrepareMsgs) != 0 {
+		node.deliveryPrepareMsgs()
+	}
+
+	// Check CommitMsgs, send them.
+	if len(node.MsgBuffer.CommitMsgs) != 0 {
+		node.deliveryCommitMsgs()
 	}
 
 	return nil
@@ -592,8 +567,35 @@ func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) []error {
 	return nil
 }
 
+func (node *Node) startConsensus(state consensus.PBFT, reqMsg *consensus.RequestMsg) (*consensus.PrePrepareMsg, error) {
+	return state.StartConsensus(reqMsg)
+}
+
+func (node *Node) prePrepare(state consensus.PBFT, prePrepareMsg *consensus.PrePrepareMsg) (*consensus.VoteMsg, error) {
+	return state.PrePrepare(prePrepareMsg)
+}
+
+func (node *Node) prepare(state consensus.PBFT, prepareMsg *consensus.VoteMsg) (*consensus.VoteMsg, error) {
+	stage := state.GetStage()
+	if stage != consensus.PrePrepared {
+		return nil, fmt.Errorf("Current Stage (seqID: %d) is %d, not pre-prepared.", prepareMsg.SequenceID, stage)
+	}
+
+	return state.Prepare(prepareMsg)
+}
+
+func (node *Node) commit(state consensus.PBFT, commitMsg *consensus.VoteMsg) (*consensus.ReplyMsg, *consensus.RequestMsg, error) {
+	stage := state.GetStage()
+	if stage != consensus.Prepared {
+		return nil, nil, fmt.Errorf("Current Stage (seqID: %d) is %d, not prepared.", commitMsg.SequenceID, stage)
+	}
+
+	return state.Commit(commitMsg)
+}
+
 func (node *Node) updateView(viewID int64) {
 	node.View.ID = viewID
+	node.View.LastSequenceID = 0
 	viewIdx := viewID % int64(len(node.NodeTable))
 	node.View.Primary = node.NodeTable[viewIdx]
 
