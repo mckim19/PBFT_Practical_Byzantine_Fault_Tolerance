@@ -218,11 +218,6 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
-	// Skip surplus messages if PrePrepared stage's already passed.
-	if node.CurrentState == nil || node.CurrentState.CurrentStage != consensus.PrePrepared {
-		return nil
-	}
-
 	commitMsg, err := node.CurrentState.Prepare(prepareMsg)
 	if err != nil {
 		return err
@@ -242,11 +237,6 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 
 func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
-
-	// Skip surplus messages if Prepared stage's already passed.
-	if node.CurrentState == nil || node.CurrentState.CurrentStage != consensus.Prepared {
-		return nil
-	}
 
 	replyMsg, committedMsg, err := node.CurrentState.Commit(commitMsg)
 	if err != nil {

@@ -53,16 +53,11 @@ func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) 
 	// operations requested by clients. It does this by assigning
 	// the next available `sequence number` to a request and sending
 	// this assignment to the backups.
-	for {
-		sequenceID := time.Now().UnixNano();
-		if state.LastSequenceID < sequenceID {
-			request.SequenceID = sequenceID
-			break
-		}
-		// TODO: From TOCS: no sequence numbers are skipped but
-		// when there are view changes some sequence numbers
-		// may be assigned to null requests whose execution is a no-op.
-	}
+	request.SequenceID := state.LastSequenceID + 1
+
+	// TODO: From TOCS: no sequence numbers are skipped but
+	// when there are view changes some sequence numbers
+	// may be assigned to null requests whose execution is a no-op.
 
 	// Save ReqMsgs to its logs.
 	state.MsgLogs.ReqMsg = request
@@ -70,7 +65,6 @@ func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) 
 	// Get the digest of the request message
 	digest, err := digest(request)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
