@@ -11,7 +11,7 @@ import (
 
 type Node struct {
 	NodeID        string
-	NodeTable     map[string]string // key=nodeID, value=url
+	NodeTable     []*NodeInfo
 	View          *View
 	CurrentState  *consensus.State
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
@@ -19,6 +19,11 @@ type Node struct {
 	MsgEntrance   chan interface{}
 	MsgDelivery   chan interface{}
 	Alarm         chan bool
+}
+
+type NodeInfo struct {
+	NodeID     string
+	Url        string
 }
 
 type MsgBuffer struct {
@@ -35,29 +40,16 @@ type MsgBuffer struct {
 
 type View struct {
 	ID      int64
-	Primary string
+	Primary *NodeInfo
 }
 
 const ResolvingTimeDuration = time.Millisecond * 1000 // 1 second.
 
-func NewNode(nodeID string) *Node {
-	const viewID = 10000000000 // temporary.
-
-	var nodeTable = map[string]string{
-		"Apple": "localhost:1111",
-		"MS": "localhost:1112",
-		"Google": "localhost:1113",
-		"IBM": "localhost:1114",
-	}
-
-	// Hard-coded for test.
+func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
 		NodeID: nodeID,
 		NodeTable: nodeTable,
-		View: &View{
-			ID: viewID,
-			Primary: "Apple",
-		},
+		View: &View{},
 
 		// Consensus-related struct
 		CurrentState: nil,
@@ -80,6 +72,8 @@ func NewNode(nodeID string) *Node {
 		Alarm: make(chan bool, 1),
 	}
 
+	node.updateView(viewID)
+
 	// Start message dispatcher
 	go node.dispatchMsg()
 
@@ -101,21 +95,21 @@ func NewNode(nodeID string) *Node {
 func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 	errorMap := make(map[string]error)
 
-	for nodeID, url := range node.NodeTable {
-		if nodeID == node.NodeID {
+	for _, nodeInfo := range node.NodeTable {
+		if nodeInfo.NodeID == node.NodeID {
 			continue
 		}
 
 		jsonMsg, err := json.Marshal(msg)
 		if err != nil {
-			errorMap[nodeID] = err
+			errorMap[nodeInfo.NodeID] = err
 			continue
 		}
 
-		fmt.Println(nodeID)
-		err = send(url + path, jsonMsg)
+		fmt.Println(nodeInfo)
+		err = send(nodeInfo.Url + path, jsonMsg)
 		if err != nil {
-			errorMap[nodeID] = err
+			errorMap[nodeInfo.NodeID] = err
 			continue
 		}
 	}
@@ -145,7 +139,7 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 	}
 
 	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
-	send(node.NodeTable[node.View.Primary] + "/reply", jsonMsg)
+	send(node.View.Primary.Url + "/reply", jsonMsg)
 
 	// Notify the node can handle the next request messages.
 	node.CurrentState = nil
@@ -172,7 +166,8 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 		return err
 	}
 
-	LogStage(fmt.Sprintf("Consensus Process (ViewID:%d)", node.CurrentState.ViewID), false)
+	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %d)",
+		 node.CurrentState.ViewID, node.View.Primary.NodeID), false)
 
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
@@ -209,7 +204,7 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 
 		// !!!HACK!!!: Add PREPARE pseudo-message from Primary node
 		// because Primary node does not send the PREPARE message.
-		node.CurrentState.MsgLogs.PrepareMsgs[node.View.Primary] = nil
+		node.CurrentState.MsgLogs.PrepareMsgs[node.View.Primary.NodeID] = nil
 	}
 
 	return nil
@@ -320,6 +315,11 @@ func (node *Node) dispatchMsg() {
 func (node *Node) routeMsg(msg interface{}) []error {
 	switch msg.(type) {
 	case *consensus.RequestMsg:
+		// Skip if the node is not primary
+		if (node.NodeID != node.View.Primary.NodeID) {
+			break
+		}
+
 		node.MsgBuffer.ReqMsgsMutex.Lock()
 		node.MsgBuffer.ReqMsgs = append(node.MsgBuffer.ReqMsgs, msg.(*consensus.RequestMsg))
 		node.MsgBuffer.ReqMsgsMutex.Unlock()
@@ -327,6 +327,11 @@ func (node *Node) routeMsg(msg interface{}) []error {
 			node.deliveryRequestMsgs()
 		}
 	case *consensus.PrePrepareMsg:
+		// Skip if the node is primary
+		if (node.NodeID == node.View.Primary.NodeID) {
+			break
+		}
+
 		node.MsgBuffer.PrePrepareMsgsMutex.Lock()
 		node.MsgBuffer.PrePrepareMsgs = append(node.MsgBuffer.PrePrepareMsgs, msg.(*consensus.PrePrepareMsg))
 		node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
@@ -585,4 +590,12 @@ func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) []error {
 	}
 
 	return nil
+}
+
+func (node *Node) updateView(viewID int64) {
+	node.View.ID = viewID
+	viewIdx := viewID % int64(len(node.NodeTable))
+	node.View.Primary = node.NodeTable[viewIdx]
+
+	fmt.Println("ViewID:", node.View.ID, "Primary:", node.View.Primary.NodeID)
 }

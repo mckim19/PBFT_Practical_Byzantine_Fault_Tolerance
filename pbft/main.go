@@ -6,8 +6,20 @@ import (
 )
 
 func main() {
-	nodeID := os.Args[1]
-	server := network.NewServer(nodeID)
+	// Hard-coded for test.
+	var viewID = int64(10000000000)
 
-	server.Start()
+	var nodeTable = []*network.NodeInfo {
+		{NodeID: "Apple",  Url: "localhost:1111"},
+		{NodeID: "MS",     Url: "localhost:1112"},
+		{NodeID: "Google", Url: "localhost:1113"},
+		{NodeID: "IBM",    Url: "localhost:1114"},
+	}
+
+	nodeID := os.Args[1]
+	server := network.NewServer(nodeID, nodeTable, viewID)
+
+	if server != nil {
+		server.Start()
+	}
 }

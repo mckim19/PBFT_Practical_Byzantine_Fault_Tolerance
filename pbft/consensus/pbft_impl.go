@@ -3,7 +3,6 @@ package consensus
 import (
 	"encoding/json"
 	"errors"
-	"time"
 	"fmt"
 )
 
@@ -53,7 +52,7 @@ func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) 
 	// operations requested by clients. It does this by assigning
 	// the next available `sequence number` to a request and sending
 	// this assignment to the backups.
-	request.SequenceID := state.LastSequenceID + 1
+	request.SequenceID = state.LastSequenceID + 1
 
 	// TODO: From TOCS: no sequence numbers are skipped but
 	// when there are view changes some sequence numbers

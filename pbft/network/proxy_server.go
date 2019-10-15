@@ -14,9 +14,22 @@ type Server struct {
 	node *Node
 }
 
-func NewServer(nodeID string) *Server {
-	node := NewNode(nodeID)
-	server := &Server{node.NodeTable[nodeID], node}
+func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
+	nodeIdx := int(-1)
+	for idx, nodeInfo := range nodeTable {
+		if nodeInfo.NodeID == nodeID {
+			nodeIdx = idx
+			break
+		}
+	}
+
+	if nodeIdx == -1 {
+		fmt.Printf("Node '%s' does not exist!\n", nodeID)
+		return nil
+	}
+
+	node := NewNode(nodeID, nodeTable, viewID)
+	server := &Server{node.NodeTable[nodeIdx].Url, node}
 
 	server.setRoute()
 
