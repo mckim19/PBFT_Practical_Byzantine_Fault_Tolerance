@@ -596,18 +596,23 @@ func (node *Node) executeMsg() {
 		pairs[msgPair.committedMsg.SequenceID] = msgPair
 		committedMsgs = make([]*consensus.RequestMsg, 0)
 
-		for sequenceID, p := range pairs {
-			var lastCommittedMsg *consensus.RequestMsg
+		// Execute operation for all the consecutive messages.
+		for {
+			var lastSequenceID int64
 
 			// Find the last committed message.
 			msgTotalCnt := len(node.CommittedMsgs)
 			if msgTotalCnt > 0 {
-				lastCommittedMsg = node.CommittedMsgs[msgTotalCnt - 1]
+				lastCommittedMsg := node.CommittedMsgs[msgTotalCnt - 1]
+				lastSequenceID = lastCommittedMsg.SequenceID
+			} else {
+				lastSequenceID = 0
 			}
 
-			// Stop execution if the timely message does not executed.
-			if lastCommittedMsg != nil &&
-			   lastCommittedMsg.SequenceID + 1 != sequenceID {
+			// Stop execution if the message for the
+			// next sequence is not ready to execute.
+			p := pairs[lastSequenceID + 1]
+			if p == nil {
 				break
 			}
 
@@ -624,10 +629,7 @@ func (node *Node) executeMsg() {
 			LogStage("Reply", true)
 
 			// Delete the current message pair.
-			// [Golang: If a map entry is created during iteration,
-			// that entry may be produced during the iteration
-			// or may be skipped.]
-			delete(pairs, sequenceID)
+			delete(pairs, lastSequenceID)
 		}
 
 		// Print all committed messages.
