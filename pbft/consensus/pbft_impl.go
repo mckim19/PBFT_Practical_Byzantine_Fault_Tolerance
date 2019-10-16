@@ -23,7 +23,6 @@ type MsgLogs struct {
 // f = (n-1) / 3
 // n = 4, in this case.
 const f = 1
-const numCommittee = 3*f+1
 
 // lastSequenceID will be -1 if there is no last sequence ID.
 func CreateState(viewID int64, lastSequenceID int64) *State {
@@ -102,6 +101,11 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 	// Print current voting status
 	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
 
+	// Return nil if the state has already passed prepared stage.
+	if len(state.MsgLogs.PrepareMsgs) > 2*f {
+		return nil, nil
+	}
+
 	if state.prepared() {
 		// Change the stage to prepared.
 		state.CurrentStage = Prepared
@@ -128,6 +132,11 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	// Print current voting status
 	fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
 
+	// Return nil if the state has already passed commited stage.
+	if len(state.MsgLogs.CommitMsgs) > 2*f {
+		return nil, nil, nil
+	}
+
 	if state.committed() {
 		// Change the stage to prepared.
 		state.CurrentStage = Committed
@@ -144,18 +153,6 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	}
 
 	return nil, nil, nil
-}
-
-func (state *State) GetStage() Stage {
-	return state.CurrentStage
-}
-
-func (state *State) GetViewID() int64 {
-	return state.ViewID
-}
-
-func (state *State) GetLastSequenceID() int64 {
-	return state.LastSequenceID
 }
 
 func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) error {
@@ -195,7 +192,7 @@ func (state *State) prepared() bool {
 		return false
 	}
 
-	if len(state.MsgLogs.PrepareMsgs) < numCommittee - 1 {
+	if len(state.MsgLogs.PrepareMsgs) < 2*f {
 		return false
 	}
 
@@ -213,7 +210,7 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if len(state.MsgLogs.CommitMsgs) < numCommittee - 1 {
+	if len(state.MsgLogs.CommitMsgs) < 2*f {
 		return false
 	}
 

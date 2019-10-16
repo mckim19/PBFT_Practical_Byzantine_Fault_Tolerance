@@ -653,21 +653,15 @@ func (node *Node) prePrepare(state consensus.PBFT, prePrepareMsg *consensus.PreP
 	return state.PrePrepare(prePrepareMsg)
 }
 
+// Even though the state has passed prepare stage, the node can receive
+// PREPARE messages from backup servers which consensus are slow.
 func (node *Node) prepare(state consensus.PBFT, prepareMsg *consensus.VoteMsg) (*consensus.VoteMsg, error) {
-	stage := state.GetStage()
-	if stage != consensus.PrePrepared {
-		return nil, fmt.Errorf("Current Stage (seqID: %d) is %d, not pre-prepared.", prepareMsg.SequenceID, stage)
-	}
-
 	return state.Prepare(prepareMsg)
 }
 
+// Even though the state has passed commit stage, the node can receive
+// COMMIT messages from backup servers which consensus are slow.
 func (node *Node) commit(state consensus.PBFT, commitMsg *consensus.VoteMsg) (*consensus.ReplyMsg, *consensus.RequestMsg, error) {
-	stage := state.GetStage()
-	if stage != consensus.Prepared {
-		return nil, nil, fmt.Errorf("Current Stage (seqID: %d) is %d, not prepared.", commitMsg.SequenceID, stage)
-	}
-
 	return state.Commit(commitMsg)
 }
 
