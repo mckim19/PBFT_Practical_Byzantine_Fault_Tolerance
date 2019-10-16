@@ -268,6 +268,9 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 			return errors.New("committed message is nil, even though the reply message is not nil")
 		}
 
+		// Attach node ID to the message
+		replyMsg.NodeID = node.NodeID
+
 		node.MsgExecution <- &MsgPair{replyMsg, committedMsg}
 	}
 
@@ -608,17 +611,15 @@ func (node *Node) executeMsg() {
 				break
 			}
 
+			committedMsgs = append(committedMsgs, p.committedMsg)
+			LogStage("Commit", true)
+
 			// TODO: execute appropriate operation.
 			p.replyMsg.Result = "Executed"
-
-			// Attach node ID to the message
-			p.replyMsg.NodeID = node.NodeID
 
 			// Save the last version of committed messages to node.
 			node.CommittedMsgs = append(node.CommittedMsgs, p.committedMsg)
 
-			committedMsgs = append(committedMsgs, p.committedMsg)
-			LogStage("Commit", true)
 			node.Reply(p.replyMsg)
 			LogStage("Reply", true)
 
