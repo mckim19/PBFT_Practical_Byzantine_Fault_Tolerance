@@ -186,7 +186,6 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 // with the PRE-PREPARE and 2*f matching PREPARE messages for sequence number n,
 // view v, and request m. We call this certificate the prepared certificate
 // and we say that the replica "prepared" the request.
-// TODO: async protocol
 func (state *State) prepared() bool {
 	if state.MsgLogs.ReqMsg == nil {
 		return false
@@ -204,7 +203,6 @@ func (state *State) prepared() bool {
 // from different replicas (including itself). We call this certificate
 // the committed certificate and say that the request is "committed"
 // by the replica when it has both the prepared and committed certificates.
-// TODO: async protocol
 func (state *State) committed() bool {
 	if !state.prepared() {
 		return false

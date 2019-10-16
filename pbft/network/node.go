@@ -16,9 +16,12 @@ type Node struct {
 	States        map[int64]*consensus.State // key: sequenceID, value: state
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
 	MsgBuffer     *MsgBuffer
+
+	// Channels
 	MsgEntrance   chan interface{}
 	MsgDelivery   chan interface{}
 	MsgExecution  chan *MsgPair
+	MsgError      chan []error
 	Alarm         chan bool
 }
 
@@ -81,6 +84,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgEntrance: make(chan interface{}),
 		MsgDelivery: make(chan interface{}, len(nodeTable) * 3), // TODO: enough?
 		MsgExecution: make(chan *MsgPair),
+		MsgError: make(chan []error),
 		Alarm: make(chan bool, 1),
 	}
 
@@ -97,6 +101,9 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 
 	// Start message executor
 	go node.executeMsg()
+
+	// Start message error collector
+	go node.errorMsg()
 
 	// TODO:
 	// From TOCS: The backups check the sequence numbers assigned by
@@ -133,10 +140,6 @@ func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 		return nil
 	} else {
 		// TODO: we currently assume all nodes are alive
-		//return errorMap
-		for nodeID, err := range errorMap {
-			fmt.Printf("[%s]: %s\n", nodeID, err)
-		}
 		panic("Broadcast ERROR!!!")
 	}
 }
@@ -156,8 +159,6 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 // Consensus start procedure for the Primary.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogMsg(reqMsg)
-
-	// TODO: Check the request message has a right form.
 
 	// Create a new state for the new consensus.
 	state, err := node.createStateForNewConsensus(reqMsg.Timestamp)
@@ -295,22 +296,14 @@ func (node *Node) dispatchMsg() {
 	for {
 		select {
 		case msg := <-node.MsgEntrance:
-			err := node.routeMsg(msg)
-			if err != nil {
-				fmt.Println(err)
-				// TODO: send err to ErrorChannel
-			}
+			node.routeMsg(msg)
 		case <-node.Alarm:
-			err := node.routeMsgWhenAlarmed()
-			if err != nil {
-				fmt.Println(err)
-				// TODO: send err to ErrorChannel
-			}
+			node.routeMsgWhenAlarmed()
 		}
 	}
 }
 
-func (node *Node) routeMsg(msg interface{}) []error {
+func (node *Node) routeMsg(msg interface{}) {
 	switch msg.(type) {
 	case *consensus.RequestMsg:
 		// Skip if the node is not primary
@@ -332,24 +325,20 @@ func (node *Node) routeMsg(msg interface{}) []error {
 		node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
 	case *consensus.VoteMsg:
 		if msg.(*consensus.VoteMsg).MsgType == consensus.PrepareMsg {
-			fmt.Println("Prepare route")
 			node.MsgBuffer.PrepareMsgsMutex.Lock()
 			node.MsgBuffer.PrepareMsgs = append(node.MsgBuffer.PrepareMsgs, msg.(*consensus.VoteMsg))
 			node.MsgBuffer.PrepareMsgsMutex.Unlock()
 		} else if msg.(*consensus.VoteMsg).MsgType == consensus.CommitMsg {
-			fmt.Println("Commit route")
 			node.MsgBuffer.CommitMsgsMutex.Lock()
 			node.MsgBuffer.CommitMsgs = append(node.MsgBuffer.CommitMsgs, msg.(*consensus.VoteMsg))
 			node.MsgBuffer.CommitMsgsMutex.Unlock()
 		}
 	}
-
-	return nil
 }
 
 // Buffered messages for each consensus stage are sequentially processed,
 // starting from getting new request to replying them.
-func (node *Node) routeMsgWhenAlarmed() []error {
+func (node *Node) routeMsgWhenAlarmed() {
 	// Check ReqMsgs, send them.
 	if len(node.MsgBuffer.ReqMsgs) != 0 {
 		node.deliveryRequestMsgs()
@@ -369,11 +358,9 @@ func (node *Node) routeMsgWhenAlarmed() []error {
 	if len(node.MsgBuffer.CommitMsgs) != 0 {
 		node.deliveryCommitMsgs()
 	}
-
-	return nil
 }
 
-func (node *Node) deliveryRequestMsgs() []error {
+func (node *Node) deliveryRequestMsgs() {
 	// Copy buffered messages with buffer locked.
 	node.MsgBuffer.ReqMsgsMutex.Lock()
 	msgTotalCnt := len(node.MsgBuffer.ReqMsgs)
@@ -390,11 +377,9 @@ func (node *Node) deliveryRequestMsgs() []error {
 
 	// Send messages.
 	node.MsgDelivery <- msgs
-
-	return nil
 }
 
-func (node *Node) deliveryPrePrepareMsgs() []error {
+func (node *Node) deliveryPrePrepareMsgs() {
 	// Copy buffered messages with buffer locked.
 	node.MsgBuffer.PrePrepareMsgsMutex.Lock()
 	msgTotalCnt := len(node.MsgBuffer.PrePrepareMsgs)
@@ -411,11 +396,9 @@ func (node *Node) deliveryPrePrepareMsgs() []error {
 
 	// Send messages.
 	node.MsgDelivery <- msgs
-
-	return nil
 }
 
-func (node *Node) deliveryPrepareMsgs() []error {
+func (node *Node) deliveryPrepareMsgs() {
 	// Copy buffered messages with buffer locked.
 	node.MsgBuffer.PrepareMsgsMutex.Lock()
 	msgs := make([]*consensus.VoteMsg, len(node.MsgBuffer.PrepareMsgs))
@@ -427,11 +410,9 @@ func (node *Node) deliveryPrepareMsgs() []error {
 
 	// Send messages.
 	node.MsgDelivery <- msgs
-
-	return nil
 }
 
-func (node *Node) deliveryCommitMsgs() []error {
+func (node *Node) deliveryCommitMsgs() {
 	// Copy buffered messages with buffer locked.
 	node.MsgBuffer.CommitMsgsMutex.Lock()
 	msgs := make([]*consensus.VoteMsg, len(node.MsgBuffer.CommitMsgs))
@@ -443,8 +424,6 @@ func (node *Node) deliveryCommitMsgs() []error {
 
 	// Send messages.
 	node.MsgDelivery <- msgs
-
-	return nil
 }
 
 func (node *Node) resolveMsg() {
@@ -455,10 +434,7 @@ func (node *Node) resolveMsg() {
 		case []*consensus.RequestMsg:
 			errs := node.resolveRequestMsg(msgs.([]*consensus.RequestMsg))
 			if len(errs) != 0 {
-				for _, err := range errs {
-					fmt.Println(err)
-				}
-				// TODO: send err to ErrorChannel
+				node.MsgError <- errs
 			}
 			// Raise alarm to resolve the remained messages
 			// in the message buffers.
@@ -466,10 +442,7 @@ func (node *Node) resolveMsg() {
 		case []*consensus.PrePrepareMsg:
 			errs := node.resolvePrePrepareMsg(msgs.([]*consensus.PrePrepareMsg))
 			if len(errs) != 0 {
-				for _, err := range errs {
-					fmt.Println(err)
-				}
-				// TODO: send err to ErrorChannel
+				node.MsgError <- errs
 			}
 			// Raise alarm to resolve the remained messages
 			// in the message buffers.
@@ -483,18 +456,12 @@ func (node *Node) resolveMsg() {
 			if voteMsgs[0].MsgType == consensus.PrepareMsg {
 				errs := node.resolvePrepareMsg(voteMsgs)
 				if len(errs) != 0 {
-					for _, err := range errs {
-						fmt.Println(err)
-					}
-					// TODO: send err to ErrorChannel
+					node.MsgError <- errs
 				}
 			} else if voteMsgs[0].MsgType == consensus.CommitMsg {
 				errs := node.resolveCommitMsg(voteMsgs)
 				if len(errs) != 0 {
-					for _, err := range errs {
-						fmt.Println(err)
-					}
-					// TODO: send err to ErrorChannel
+					node.MsgError <- errs
 				}
 			}
 		}
@@ -641,6 +608,15 @@ func (node *Node) executeMsg() {
 		for idx, v := range committedMsgs {
 			fmt.Printf("committedMsgs[%d]: %s, %d, %s, %d\n",
 			            idx, v.ClientID, v.Timestamp, v.Operation, v.SequenceID)
+		}
+	}
+}
+
+func (node *Node) errorMsg() {
+	for {
+		errs := <-node.MsgError
+		for _, err := range errs {
+			fmt.Println(err)
 		}
 	}
 }

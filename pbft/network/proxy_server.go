@@ -1,3 +1,5 @@
+// TODO: secure connection such as HTTPS, or manual implementation
+// from Section 5.2.2 Key Exchanges on TOCS.
 package network
 
 import (
@@ -29,7 +31,7 @@ func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
 	}
 
 	node := NewNode(nodeID, nodeTable, viewID)
-	server := &Server{node.NodeTable[nodeIdx].Url, node}
+	server := &Server{nodeTable[nodeIdx].Url, node}
 
 	server.setRoute()
 
