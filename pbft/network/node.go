@@ -47,6 +47,9 @@ type View struct {
 // Maximum delay between dispatching and delivering messages.
 const ResolvingTimeDuration = time.Millisecond * 1000
 
+// Maximum batch size of messages for creating new consensus.
+const BatchMax = 2
+
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
 		NodeID: nodeID,
@@ -221,7 +224,12 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
-	commitMsg, err := node.prepare(node.States[prepareMsg.SequenceID], prepareMsg)
+	state := node.States[prepareMsg.SequenceID]
+	if state == nil {
+		return fmt.Errorf("[Prepare] State for sequence number %d has not created yet.\n", prepareMsg.SequenceID)
+	}
+
+	commitMsg, err := node.prepare(state, prepareMsg)
 	if err != nil {
 		return err
 	}
@@ -241,7 +249,12 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
 
-	replyMsg, committedMsg, err := node.commit(node.States[commitMsg.SequenceID], commitMsg)
+	state := node.States[commitMsg.SequenceID]
+	if state == nil {
+		return fmt.Errorf("[Commit] State for sequence number %d has not created yet.\n", commitMsg.SequenceID)
+	}
+
+	replyMsg, committedMsg, err := node.commit(state, commitMsg)
 	if err != nil {
 		return err
 	}
@@ -368,11 +381,16 @@ func (node *Node) routeMsgWhenAlarmed() []error {
 func (node *Node) deliveryRequestMsgs() []error {
 	// Copy buffered messages with buffer locked.
 	node.MsgBuffer.ReqMsgsMutex.Lock()
-	msgs := make([]*consensus.RequestMsg, len(node.MsgBuffer.ReqMsgs))
-	copy(msgs, node.MsgBuffer.ReqMsgs)
+	msgTotalCnt := len(node.MsgBuffer.ReqMsgs)
+	msgBatchCnt := BatchMax
+	if msgBatchCnt > msgTotalCnt {
+		msgBatchCnt = msgTotalCnt
+	}
+	msgs, buffer := node.MsgBuffer.ReqMsgs[:msgBatchCnt],
+	                node.MsgBuffer.ReqMsgs[msgBatchCnt:]
 
-	// Empty the buffer and release the buffer lock.
-	node.MsgBuffer.ReqMsgs = make([]*consensus.RequestMsg, 0)
+	// Pop msgs from the buffer and release the buffer lock.
+	node.MsgBuffer.ReqMsgs = buffer
 	node.MsgBuffer.ReqMsgsMutex.Unlock()
 
 	// Send messages.
@@ -384,11 +402,16 @@ func (node *Node) deliveryRequestMsgs() []error {
 func (node *Node) deliveryPrePrepareMsgs() []error {
 	// Copy buffered messages with buffer locked.
 	node.MsgBuffer.PrePrepareMsgsMutex.Lock()
-	msgs := make([]*consensus.PrePrepareMsg, len(node.MsgBuffer.PrePrepareMsgs))
-	copy(msgs, node.MsgBuffer.PrePrepareMsgs)
+	msgTotalCnt := len(node.MsgBuffer.PrePrepareMsgs)
+	msgBatchCnt := BatchMax
+	if msgBatchCnt > msgTotalCnt {
+		msgBatchCnt = msgTotalCnt
+	}
+	msgs, buffer := node.MsgBuffer.PrePrepareMsgs[:msgBatchCnt],
+	                node.MsgBuffer.PrePrepareMsgs[msgBatchCnt:]
 
-	// Empty the buffer and release the buffer lock.
-	node.MsgBuffer.PrePrepareMsgs = make([]*consensus.PrePrepareMsg, 0)
+	// Pop msgs from the buffer and release the buffer lock.
+	node.MsgBuffer.PrePrepareMsgs = buffer
 	node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
 
 	// Send messages.
