@@ -18,6 +18,7 @@ type Node struct {
 	MsgBuffer     *MsgBuffer
 	MsgEntrance   chan interface{}
 	MsgDelivery   chan interface{}
+	MsgExecution  chan *MsgPair
 	Alarm         chan bool
 }
 
@@ -42,6 +43,11 @@ type View struct {
 	ID             int64
 	LastSequenceID int64
 	Primary        *NodeInfo
+}
+
+type MsgPair struct {
+	replyMsg     *consensus.ReplyMsg
+	committedMsg *consensus.RequestMsg
 }
 
 // Maximum delay between dispatching and delivering messages.
@@ -74,6 +80,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		// Channels
 		MsgEntrance: make(chan interface{}),
 		MsgDelivery: make(chan interface{}, len(nodeTable) * 3), // TODO: enough?
+		MsgExecution: make(chan *MsgPair),
 		Alarm: make(chan bool, 1),
 	}
 
@@ -87,6 +94,9 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 
 	// Start message resolver
 	go node.resolveMsg()
+
+	// Start message executor
+	go node.executeMsg()
 
 	// TODO:
 	// From TOCS: The backups check the sequence numbers assigned by
@@ -132,12 +142,6 @@ func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 }
 
 func (node *Node) Reply(msg *consensus.ReplyMsg) error {
-	// Print all committed messages.
-	for _, value := range node.CommittedMsgs {
-		fmt.Printf("Committed value: %s, %d, %s, %d", value.ClientID, value.Timestamp, value.Operation, value.SequenceID)
-	}
-	fmt.Print("\n")
-
 	jsonMsg, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -226,7 +230,7 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 
 	state := node.States[prepareMsg.SequenceID]
 	if state == nil {
-		return fmt.Errorf("[Prepare] State for sequence number %d has not created yet.\n", prepareMsg.SequenceID)
+		return fmt.Errorf("[Prepare] State for sequence number %d has not created yet.", prepareMsg.SequenceID)
 	}
 
 	commitMsg, err := node.prepare(state, prepareMsg)
@@ -251,7 +255,7 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 
 	state := node.States[commitMsg.SequenceID]
 	if state == nil {
-		return fmt.Errorf("[Commit] State for sequence number %d has not created yet.\n", commitMsg.SequenceID)
+		return fmt.Errorf("[Commit] State for sequence number %d has not created yet.", commitMsg.SequenceID)
 	}
 
 	replyMsg, committedMsg, err := node.commit(state, commitMsg)
@@ -264,21 +268,7 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 			return errors.New("committed message is nil, even though the reply message is not nil")
 		}
 
-		// TODO: fill the result field, after all execution for
-		// other states which the sequence number is smaller,
-		// i.e., the sequence number of the last committed message is
-		// one smaller than the current message.
-		replyMsg.Result = "Executed"
-
-		// Attach node ID to the message
-		replyMsg.NodeID = node.NodeID
-
-		// Save the last version of committed messages to node.
-		node.CommittedMsgs = append(node.CommittedMsgs, committedMsg)
-
-		LogStage("Commit", true)
-		node.Reply(replyMsg)
-		LogStage("Reply", true)
+		node.MsgExecution <- &MsgPair{replyMsg, committedMsg}
 	}
 
 	return nil
@@ -588,6 +578,63 @@ func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) []error {
 	}
 
 	return nil
+}
+
+// Fill the result field, after all execution for
+// other states which the sequence number is smaller,
+// i.e., the sequence number of the last committed message is
+// one smaller than the current message.
+func (node *Node) executeMsg() {
+	var committedMsgs []*consensus.RequestMsg
+	pairs := make(map[int64]*MsgPair)
+
+	for {
+		msgPair := <-node.MsgExecution
+		pairs[msgPair.committedMsg.SequenceID] = msgPair
+		committedMsgs = make([]*consensus.RequestMsg, 0)
+
+		for sequenceID, p := range pairs {
+			var lastCommittedMsg *consensus.RequestMsg
+
+			// Find the last committed message.
+			msgTotalCnt := len(node.CommittedMsgs)
+			if msgTotalCnt > 0 {
+				lastCommittedMsg = node.CommittedMsgs[msgTotalCnt - 1]
+			}
+
+			// Stop execution if the timely message does not executed.
+			if lastCommittedMsg != nil &&
+			   lastCommittedMsg.SequenceID + 1 != sequenceID {
+				break
+			}
+
+			// TODO: execute appropriate operation.
+			p.replyMsg.Result = "Executed"
+
+			// Attach node ID to the message
+			p.replyMsg.NodeID = node.NodeID
+
+			// Save the last version of committed messages to node.
+			node.CommittedMsgs = append(node.CommittedMsgs, p.committedMsg)
+
+			committedMsgs = append(committedMsgs, p.committedMsg)
+			LogStage("Commit", true)
+			node.Reply(p.replyMsg)
+			LogStage("Reply", true)
+
+			// Delete the current message pair.
+			// [Golang: If a map entry is created during iteration,
+			// that entry may be produced during the iteration
+			// or may be skipped.]
+			delete(pairs, sequenceID)
+		}
+
+		// Print all committed messages.
+		for _, v := range committedMsgs {
+			fmt.Printf("Committed value: %s, %d, %s, %d\n",
+			            v.ClientID, v.Timestamp, v.Operation, v.SequenceID)
+		}
+	}
 }
 
 func (node *Node) startConsensus(state consensus.PBFT, reqMsg *consensus.RequestMsg) (*consensus.PrePrepareMsg, error) {
