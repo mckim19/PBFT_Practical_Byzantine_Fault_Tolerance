@@ -347,6 +347,8 @@ func (node *Node) routeMsg(msg interface{}) []error {
 	return nil
 }
 
+// Buffered messages for each consensus stage are sequentially processed,
+// starting from getting new request to replying them.
 func (node *Node) routeMsgWhenAlarmed() []error {
 	// Check ReqMsgs, send them.
 	if len(node.MsgBuffer.ReqMsgs) != 0 {
@@ -458,6 +460,9 @@ func (node *Node) resolveMsg() {
 				}
 				// TODO: send err to ErrorChannel
 			}
+			// Raise alarm to resolve the remained messages
+			// in the message buffers.
+			node.Alarm <- true
 		case []*consensus.PrePrepareMsg:
 			errs := node.resolvePrePrepareMsg(msgs.([]*consensus.PrePrepareMsg))
 			if len(errs) != 0 {
@@ -466,6 +471,9 @@ func (node *Node) resolveMsg() {
 				}
 				// TODO: send err to ErrorChannel
 			}
+			// Raise alarm to resolve the remained messages
+			// in the message buffers.
+			node.Alarm <- true
 		case []*consensus.VoteMsg:
 			voteMsgs := msgs.([]*consensus.VoteMsg)
 			if len(voteMsgs) == 0 {
@@ -490,9 +498,6 @@ func (node *Node) resolveMsg() {
 				}
 			}
 		}
-
-		// Raise alarm that some messages may be buffered.
-		node.Alarm <- true
 	}
 }
 
@@ -633,9 +638,9 @@ func (node *Node) executeMsg() {
 		}
 
 		// Print all committed messages.
-		for _, v := range committedMsgs {
-			fmt.Printf("Committed value: %s, %d, %s, %d\n",
-			            v.ClientID, v.Timestamp, v.Operation, v.SequenceID)
+		for idx, v := range committedMsgs {
+			fmt.Printf("committedMsgs[%d]: %s, %d, %s, %d\n",
+			            idx, v.ClientID, v.Timestamp, v.Operation, v.SequenceID)
 		}
 	}
 }
