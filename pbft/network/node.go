@@ -303,8 +303,8 @@ func (node *Node) dispatchMsg() {
 	}
 }
 
-func (node *Node) routeMsg(msg interface{}) {
-	switch msg.(type) {
+func (node *Node) routeMsg(msgEntered interface{}) {
+	switch msg := msgEntered.(type) {
 	case *consensus.RequestMsg:
 		// Skip if the node is not primary
 		if (node.NodeID != node.View.Primary.NodeID) {
@@ -312,7 +312,7 @@ func (node *Node) routeMsg(msg interface{}) {
 		}
 
 		node.MsgBuffer.ReqMsgsMutex.Lock()
-		node.MsgBuffer.ReqMsgs = append(node.MsgBuffer.ReqMsgs, msg.(*consensus.RequestMsg))
+		node.MsgBuffer.ReqMsgs = append(node.MsgBuffer.ReqMsgs, msg)
 		node.MsgBuffer.ReqMsgsMutex.Unlock()
 	case *consensus.PrePrepareMsg:
 		// Skip if the node is primary
@@ -321,16 +321,16 @@ func (node *Node) routeMsg(msg interface{}) {
 		}
 
 		node.MsgBuffer.PrePrepareMsgsMutex.Lock()
-		node.MsgBuffer.PrePrepareMsgs = append(node.MsgBuffer.PrePrepareMsgs, msg.(*consensus.PrePrepareMsg))
+		node.MsgBuffer.PrePrepareMsgs = append(node.MsgBuffer.PrePrepareMsgs, msg)
 		node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
 	case *consensus.VoteMsg:
-		if msg.(*consensus.VoteMsg).MsgType == consensus.PrepareMsg {
+		if msg.MsgType == consensus.PrepareMsg {
 			node.MsgBuffer.PrepareMsgsMutex.Lock()
-			node.MsgBuffer.PrepareMsgs = append(node.MsgBuffer.PrepareMsgs, msg.(*consensus.VoteMsg))
+			node.MsgBuffer.PrepareMsgs = append(node.MsgBuffer.PrepareMsgs, msg)
 			node.MsgBuffer.PrepareMsgsMutex.Unlock()
-		} else if msg.(*consensus.VoteMsg).MsgType == consensus.CommitMsg {
+		} else if msg.MsgType == consensus.CommitMsg {
 			node.MsgBuffer.CommitMsgsMutex.Lock()
-			node.MsgBuffer.CommitMsgs = append(node.MsgBuffer.CommitMsgs, msg.(*consensus.VoteMsg))
+			node.MsgBuffer.CommitMsgs = append(node.MsgBuffer.CommitMsgs, msg)
 			node.MsgBuffer.CommitMsgsMutex.Unlock()
 		}
 	}
@@ -429,28 +429,27 @@ func (node *Node) deliveryCommitMsgs() {
 func (node *Node) resolveMsg() {
 	for {
 		// Get buffered messages from the dispatcher.
-		msgs := <-node.MsgDelivery
-		switch msgs.(type) {
+		msgsDelivered := <-node.MsgDelivery
+		switch msgs := msgsDelivered.(type) {
 		case []*consensus.RequestMsg:
-			node.resolveRequestMsg(msgs.([]*consensus.RequestMsg))
+			node.resolveRequestMsg(msgs)
 			// Raise alarm to resolve the remained messages
 			// in the message buffers.
 			node.Alarm <- true
 		case []*consensus.PrePrepareMsg:
-			node.resolvePrePrepareMsg(msgs.([]*consensus.PrePrepareMsg))
+			node.resolvePrePrepareMsg(msgs)
 			// Raise alarm to resolve the remained messages
 			// in the message buffers.
 			node.Alarm <- true
 		case []*consensus.VoteMsg:
-			voteMsgs := msgs.([]*consensus.VoteMsg)
-			if len(voteMsgs) == 0 {
+			if len(msgs) == 0 {
 				break
 			}
 
-			if voteMsgs[0].MsgType == consensus.PrepareMsg {
-				node.resolvePrepareMsg(voteMsgs)
-			} else if voteMsgs[0].MsgType == consensus.CommitMsg {
-				node.resolveCommitMsg(voteMsgs)
+			if msgs[0].MsgType == consensus.PrepareMsg {
+				node.resolvePrepareMsg(msgs)
+			} else if msgs[0].MsgType == consensus.CommitMsg {
+				node.resolveCommitMsg(msgs)
 			}
 		}
 	}
