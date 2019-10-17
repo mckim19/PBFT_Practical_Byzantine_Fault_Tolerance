@@ -11,6 +11,11 @@ type State struct {
 	MsgLogs        *MsgLogs
 	LastSequenceID int64
 	CurrentStage   Stage
+
+	// f: the number of Byzantine faulty nodes
+	// f = (n-1) / 3
+	// e.g., n = 5, f = 1
+	f int
 }
 
 type MsgLogs struct {
@@ -19,13 +24,8 @@ type MsgLogs struct {
 	CommitMsgs    map[string]*VoteMsg
 }
 
-// f: # of Byzantine faulty node
-// f = (n-1) / 3
-// n = 4, in this case.
-const f = 1
-
 // lastSequenceID will be -1 if there is no last sequence ID.
-func CreateState(viewID int64, lastSequenceID int64) *State {
+func CreateState(viewID int64, lastSequenceID int64, totNodes int) *State {
 	return &State{
 		ViewID: viewID,
 		MsgLogs: &MsgLogs{
@@ -35,6 +35,8 @@ func CreateState(viewID int64, lastSequenceID int64) *State {
 		},
 		LastSequenceID: lastSequenceID,
 		CurrentStage: Idle,
+
+		f: (totNodes - 1) / 3,
 	}
 }
 
@@ -102,7 +104,7 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
 
 	// Return nil if the state has already passed prepared stage.
-	if len(state.MsgLogs.PrepareMsgs) > 2*f {
+	if len(state.MsgLogs.PrepareMsgs) > 2*state.f {
 		return nil, nil
 	}
 
@@ -133,7 +135,7 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
 
 	// Return nil if the state has already passed commited stage.
-	if len(state.MsgLogs.CommitMsgs) > 2*f {
+	if len(state.MsgLogs.CommitMsgs) > 2*state.f {
 		return nil, nil, nil
 	}
 
@@ -191,7 +193,7 @@ func (state *State) prepared() bool {
 		return false
 	}
 
-	if len(state.MsgLogs.PrepareMsgs) < 2*f {
+	if len(state.MsgLogs.PrepareMsgs) < 2*state.f {
 		return false
 	}
 
@@ -208,7 +210,7 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if len(state.MsgLogs.CommitMsgs) < 2*f {
+	if len(state.MsgLogs.CommitMsgs) < 2*state.f {
 		return false
 	}
 

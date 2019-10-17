@@ -288,7 +288,7 @@ func (node *Node) createStateForNewConsensus(timeStamp int64) (*consensus.State,
 
 	LogStage("Create the replica status", true)
 
-	return consensus.CreateState(node.View.ID, node.View.LastSequenceID), nil
+	return consensus.CreateState(node.View.ID, node.View.LastSequenceID, len(node.NodeTable)), nil
 }
 
 func (node *Node) dispatchMsg() {
