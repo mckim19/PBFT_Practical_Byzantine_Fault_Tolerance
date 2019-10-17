@@ -110,15 +110,14 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 	server.node.GetReply(&msg)
 }
 
-func send(url string, msg []byte) error {
+func send(errCh chan<- error, url string, msg []byte) {
 	buff := bytes.NewBuffer(msg)
 	c := &http.Client{}
 
 	resp, err := c.Post("http://" + url, "application/json", buff)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	errCh <- err
 
-	return nil
+	if err == nil {
+		defer resp.Body.Close()
+	}
 }

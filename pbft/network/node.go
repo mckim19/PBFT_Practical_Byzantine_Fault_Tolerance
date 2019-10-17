@@ -21,6 +21,7 @@ type Node struct {
 	MsgEntrance   chan interface{}
 	MsgDelivery   chan interface{}
 	MsgExecution  chan *MsgPair
+	MsgOutbound   chan *MsgOut
 	MsgError      chan []error
 	Alarm         chan bool
 }
@@ -53,8 +54,17 @@ type MsgPair struct {
 	committedMsg *consensus.RequestMsg
 }
 
+// Outbound message
+type MsgOut struct {
+	Path string
+	Msg  []byte
+}
+
 // Maximum delay between dispatching and delivering messages.
 const ResolvingTimeDuration = time.Millisecond * 1000
+
+// Maximum timeout for any outbound messages.
+const MaxTimeout = time.Millisecond * 500
 
 // Maximum batch size of messages for creating new consensus.
 const BatchMax = 2
@@ -84,6 +94,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgEntrance: make(chan interface{}),
 		MsgDelivery: make(chan interface{}, len(nodeTable) * 3), // TODO: enough?
 		MsgExecution: make(chan *MsgPair),
+		MsgOutbound: make(chan *MsgOut),
 		MsgError: make(chan []error),
 		Alarm: make(chan bool, 1),
 	}
@@ -102,8 +113,11 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	// Start message executor
 	go node.executeMsg()
 
-	// Start message error collector
-	go node.errorMsg()
+	// Start outbound message sender
+	go node.sendMsg()
+
+	// Start message error logger
+	go node.logErrorMsg()
 
 	// TODO:
 	// From TOCS: The backups check the sequence numbers assigned by
@@ -114,46 +128,31 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	return node
 }
 
-func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
-	errorMap := make(map[string]error)
+// Broadcast marshalled message.
+func (node *Node) Broadcast(msg interface{}, path string) {
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		node.MsgError <- []error{err}
+		return
+	}
 
 	for _, nodeInfo := range node.NodeTable {
 		if nodeInfo.NodeID == node.NodeID {
 			continue
 		}
-
-		jsonMsg, err := json.Marshal(msg)
-		if err != nil {
-			errorMap[nodeInfo.NodeID] = err
-			continue
-		}
-
-		fmt.Println(nodeInfo)
-		err = send(nodeInfo.Url + path, jsonMsg)
-		if err != nil {
-			errorMap[nodeInfo.NodeID] = err
-			continue
-		}
-	}
-
-	if len(errorMap) == 0 {
-		return nil
-	} else {
-		// TODO: we currently assume all nodes are alive
-		panic("Broadcast ERROR!!!")
+		node.MsgOutbound <- &MsgOut{Path: nodeInfo.Url + path, Msg: jsonMsg}
 	}
 }
 
-func (node *Node) Reply(msg *consensus.ReplyMsg) error {
+func (node *Node) Reply(msg *consensus.ReplyMsg) {
 	jsonMsg, err := json.Marshal(msg)
 	if err != nil {
-		return err
+		node.MsgError <- []error{err}
+		return
 	}
 
 	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
-	send(node.View.Primary.Url + "/reply", jsonMsg)
-
-	return nil
+	node.MsgOutbound <- &MsgOut{Path: node.View.Primary.Url + "/reply", Msg: jsonMsg}
 }
 
 // Consensus start procedure for the Primary.
@@ -593,7 +592,29 @@ func (node *Node) executeMsg() {
 	}
 }
 
-func (node *Node) errorMsg() {
+func (node *Node) sendMsg() {
+	for {
+		msg := <-node.MsgOutbound
+		errCh := make(chan error, 1)
+
+		go func() {
+			send(errCh, msg.Path, msg.Msg)
+		}()
+
+		select {
+		case err := <-errCh:
+			if err != nil {
+				node.MsgError <- []error{err}
+				// TODO: view change.
+			}
+		case <-time.After(MaxTimeout):
+			node.MsgError <- []error{errors.New("out of time :(")}
+			// TODO: view change.
+		}
+	}
+}
+
+func (node *Node) logErrorMsg() {
 	for {
 		errs := <-node.MsgError
 		for _, err := range errs {
