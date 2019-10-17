@@ -432,18 +432,12 @@ func (node *Node) resolveMsg() {
 		msgs := <-node.MsgDelivery
 		switch msgs.(type) {
 		case []*consensus.RequestMsg:
-			errs := node.resolveRequestMsg(msgs.([]*consensus.RequestMsg))
-			if len(errs) != 0 {
-				node.MsgError <- errs
-			}
+			node.resolveRequestMsg(msgs.([]*consensus.RequestMsg))
 			// Raise alarm to resolve the remained messages
 			// in the message buffers.
 			node.Alarm <- true
 		case []*consensus.PrePrepareMsg:
-			errs := node.resolvePrePrepareMsg(msgs.([]*consensus.PrePrepareMsg))
-			if len(errs) != 0 {
-				node.MsgError <- errs
-			}
+			node.resolvePrePrepareMsg(msgs.([]*consensus.PrePrepareMsg))
 			// Raise alarm to resolve the remained messages
 			// in the message buffers.
 			node.Alarm <- true
@@ -454,15 +448,9 @@ func (node *Node) resolveMsg() {
 			}
 
 			if voteMsgs[0].MsgType == consensus.PrepareMsg {
-				errs := node.resolvePrepareMsg(voteMsgs)
-				if len(errs) != 0 {
-					node.MsgError <- errs
-				}
+				node.resolvePrepareMsg(voteMsgs)
 			} else if voteMsgs[0].MsgType == consensus.CommitMsg {
-				errs := node.resolveCommitMsg(voteMsgs)
-				if len(errs) != 0 {
-					node.MsgError <- errs
-				}
+				node.resolveCommitMsg(voteMsgs)
 			}
 		}
 	}
@@ -475,7 +463,7 @@ func (node *Node) alarmToDispatcher() {
 	}
 }
 
-func (node *Node) resolveRequestMsg(msgs []*consensus.RequestMsg) []error {
+func (node *Node) resolveRequestMsg(msgs []*consensus.RequestMsg) {
 	errs := make([]error, 0)
 
 	// Resolve messages
@@ -489,13 +477,11 @@ func (node *Node) resolveRequestMsg(msgs []*consensus.RequestMsg) []error {
 	}
 
 	if len(errs) != 0 {
-		return errs
+		node.MsgError <- errs
 	}
-
-	return nil
 }
 
-func (node *Node) resolvePrePrepareMsg(msgs []*consensus.PrePrepareMsg) []error {
+func (node *Node) resolvePrePrepareMsg(msgs []*consensus.PrePrepareMsg) {
 	errs := make([]error, 0)
 
 	// Resolve messages
@@ -509,13 +495,11 @@ func (node *Node) resolvePrePrepareMsg(msgs []*consensus.PrePrepareMsg) []error 
 	}
 
 	if len(errs) != 0 {
-		return errs
+		node.MsgError <- errs
 	}
-
-	return nil
 }
 
-func (node *Node) resolvePrepareMsg(msgs []*consensus.VoteMsg) []error {
+func (node *Node) resolvePrepareMsg(msgs []*consensus.VoteMsg) {
 	errs := make([]error, 0)
 
 	// Resolve messages
@@ -529,13 +513,11 @@ func (node *Node) resolvePrepareMsg(msgs []*consensus.VoteMsg) []error {
 	}
 
 	if len(errs) != 0 {
-		return errs
+		node.MsgError <- errs
 	}
-
-	return nil
 }
 
-func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) []error {
+func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) {
 	errs := make([]error, 0)
 
 	// Resolve messages
@@ -549,10 +531,8 @@ func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) []error {
 	}
 
 	if len(errs) != 0 {
-		return errs
+		node.MsgError <- errs
 	}
-
-	return nil
 }
 
 // Fill the result field, after all execution for
@@ -588,13 +568,16 @@ func (node *Node) executeMsg() {
 				break
 			}
 
+			// Add the committed message in a private log queue
+			// to print the orderly executed messages.
 			committedMsgs = append(committedMsgs, p.committedMsg)
 			LogStage("Commit", true)
 
 			// TODO: execute appropriate operation.
 			p.replyMsg.Result = "Executed"
 
-			// Save the last version of committed messages to node.
+			// After executing the operation, log the
+			// corresponding committed message to node.
 			node.CommittedMsgs = append(node.CommittedMsgs, p.committedMsg)
 
 			node.Reply(p.replyMsg)
@@ -606,8 +589,7 @@ func (node *Node) executeMsg() {
 
 		// Print all committed messages.
 		for idx, v := range committedMsgs {
-			fmt.Printf("committedMsgs[%d]: %s, %d, %s, %d\n",
-			            idx, v.ClientID, v.Timestamp, v.Operation, v.SequenceID)
+			fmt.Printf("committedMsgs[%d]: %#v\n", idx, v)
 		}
 	}
 }
