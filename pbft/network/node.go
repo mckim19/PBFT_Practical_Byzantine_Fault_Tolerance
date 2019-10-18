@@ -27,8 +27,8 @@ type Node struct {
 }
 
 type NodeInfo struct {
-	NodeID     string
-	Url        string
+	NodeID     string `json:"nodeID"`
+	Url        string `json:"url"`
 }
 
 type MsgBuffer struct {
