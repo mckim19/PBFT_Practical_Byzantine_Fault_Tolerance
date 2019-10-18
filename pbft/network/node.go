@@ -61,10 +61,10 @@ type MsgOut struct {
 }
 
 // Maximum delay between dispatching and delivering messages.
-const ResolvingTimeDuration = time.Millisecond * 1000
+const ResolvingTimeDuration = time.Millisecond * 20
 
 // Maximum timeout for any outbound messages.
-const MaxTimeout = time.Millisecond * 500
+const MaxOutboundTimeout = time.Millisecond * 500
 
 // Maximum batch size of messages for creating new consensus.
 const BatchMax = 2
@@ -607,7 +607,7 @@ func (node *Node) sendMsg() {
 				node.MsgError <- []error{err}
 				// TODO: view change.
 			}
-		case <-time.After(MaxTimeout):
+		case <-time.After(MaxOutboundTimeout):
 			node.MsgError <- []error{errors.New("out of time :(")}
 			// TODO: view change.
 		}
