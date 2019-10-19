@@ -10,7 +10,7 @@ import (
 type State struct {
 	ViewID         int64
 	MsgLogs        *MsgLogs
-	LastSequenceID int64
+	SequenceID     int64
 	CurrentStage   Stage
 
 	// f: the number of Byzantine faulty nodes
@@ -28,8 +28,7 @@ type MsgLogs struct {
 	CommitMsgsMutex  sync.Mutex
 }
 
-// lastSequenceID will be -1 if there is no last sequence ID.
-func CreateState(viewID int64, lastSequenceID int64, totNodes int, primaryID string) *State {
+func CreateState(viewID int64, totNodes int, primaryID string) *State {
 	state := &State{
 		ViewID: viewID,
 		MsgLogs: &MsgLogs{
@@ -37,7 +36,6 @@ func CreateState(viewID int64, lastSequenceID int64, totNodes int, primaryID str
 			PrepareMsgs:make(map[string]*VoteMsg),
 			CommitMsgs:make(map[string]*VoteMsg),
 		},
-		LastSequenceID: lastSequenceID,
 		CurrentStage: Idle,
 
 		f: (totNodes - 1) / 3,
@@ -50,12 +48,13 @@ func CreateState(viewID int64, lastSequenceID int64, totNodes int, primaryID str
 	return state
 }
 
-func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) {
+func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PrePrepareMsg, error) {
 	// From TOCS: The primary picks the "ordering" for execution of
 	// operations requested by clients. It does this by assigning
 	// the next available `sequence number` to a request and sending
 	// this assignment to the backups.
-	request.SequenceID = state.LastSequenceID + 1
+	state.SequenceID = sequenceID
+	request.SequenceID = sequenceID
 
 	// TODO: From TOCS: no sequence numbers are skipped but
 	// when there are view changes some sequence numbers
@@ -84,6 +83,9 @@ func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) 
 func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	// Get ReqMsgs and save it to its logs like the primary.
 	state.MsgLogs.ReqMsg = prePrepareMsg.RequestMsg
+
+	// Set sequence number same as PREPREPARE message.
+	state.SequenceID = prePrepareMsg.SequenceID
 
 	// Verify if v, n(a.k.a. sequenceID), d are correct.
 	if err := state.verifyMsg(prePrepareMsg.ViewID, prePrepareMsg.SequenceID, prePrepareMsg.Digest); err != nil {
@@ -178,12 +180,8 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 		return fmt.Errorf("state.ViewID = %d, viewID = %d", state.ViewID, viewID)
 	}
 
-	// Check if the Primary sent fault sequence number. => Faulty primary.
-	// TODO: adopt upper/lower bound check.
-	if state.LastSequenceID != -1 {
-		if state.LastSequenceID >= sequenceID {
-			return fmt.Errorf("state.LastSequenceID = %d, sequenceID = %d", state.LastSequenceID, sequenceID)
-		}
+	if state.SequenceID != sequenceID {
+		return fmt.Errorf("state.SequenceID = %d, sequenceID = %d", state.SequenceID, sequenceID)
 	}
 
 	digest, err := digest(state.MsgLogs.ReqMsg)

@@ -7,6 +7,7 @@ import (
 	"time"
 	"errors"
 	"sync"
+	"sync/atomic"
 )
 
 type Node struct {
@@ -15,6 +16,7 @@ type Node struct {
 	View          *View
 	States        map[int64]*consensus.State // key: sequenceID, value: state
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
+	TotalConsensus int64 // atomic. number of consensus started so far.
 
 	// Channels
 	MsgEntrance   chan interface{}
@@ -34,7 +36,6 @@ type NodeInfo struct {
 
 type View struct {
 	ID             int64
-	LastSequenceID int64
 	Primary        *NodeInfo
 }
 
@@ -70,6 +71,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgError: make(chan []error),
 	}
 
+	atomic.StoreInt64(&node.TotalConsensus, 0)
 	node.updateView(viewID)
 
 	for i := 0; i < 4; i++ {
@@ -129,13 +131,13 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogMsg(reqMsg)
 
-	// Create a new state for the new consensus.
-	state, err := node.createStateForNewConsensus(reqMsg.Timestamp)
+	// Create a new state object.
+	state, err := node.createState(reqMsg.Timestamp)
 	if err != nil {
 		return err
 	}
 
-	// Make the state prepared.
+	// Fill sequence number into the state and make the state prepared.
 	prePrepareMsg, err := node.startConsensus(state, reqMsg)
 	if err != nil {
 		return err
@@ -144,7 +146,6 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	// Register state into node and update last sequence number.
 	node.StatesMutex.Lock()
 	node.States[prePrepareMsg.SequenceID] = state
-	node.View.LastSequenceID = reqMsg.SequenceID
 	node.StatesMutex.Unlock()
 
 	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
@@ -163,13 +164,13 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	LogMsg(prePrepareMsg)
 
-	// Create a new state for the new consensus.
-	state, err := node.createStateForNewConsensus(prePrepareMsg.RequestMsg.Timestamp)
+	// Create a new state object.
+	state, err := node.createState(prePrepareMsg.RequestMsg.Timestamp)
 	if err != nil {
 		return err
 	}
 
-	// Make the state prepared.
+	// Fill sequence number into the state and make the state prepared.
 	prePareMsg, err := node.prePrepare(state, prePrepareMsg)
 	if err != nil {
 		return err
@@ -178,9 +179,6 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	// Register state into node and update last sequence number.
 	node.StatesMutex.Lock()
 	node.States[prePrepareMsg.SequenceID] = state
-	if node.View.LastSequenceID < prePrepareMsg.SequenceID {
-		node.View.LastSequenceID = prePrepareMsg.SequenceID
-	}
 	node.StatesMutex.Unlock()
 
 	if prePareMsg != nil {
@@ -257,14 +255,14 @@ func (node *Node) GetReply(msg *consensus.ReplyMsg) {
 	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
 }
 
-func (node *Node) createStateForNewConsensus(timeStamp int64) (*consensus.State, error) {
+func (node *Node) createState(timeStamp int64) (*consensus.State, error) {
 	// TODO: From TOCS: To guarantee exactly once semantics,
 	// replicas discard requests whose timestamp is lower than
 	// the timestamp in the last reply they sent to the client.
 
 	LogStage("Create the replica status", true)
 
-	return consensus.CreateState(node.View.ID, node.View.LastSequenceID, len(node.NodeTable), node.View.Primary.NodeID), nil
+	return consensus.CreateState(node.View.ID, len(node.NodeTable), node.View.Primary.NodeID), nil
 }
 
 func (node *Node) dispatchMsg() {
@@ -412,7 +410,11 @@ func (node *Node) logErrorMsg() {
 }
 
 func (node *Node) startConsensus(state consensus.PBFT, reqMsg *consensus.RequestMsg) (*consensus.PrePrepareMsg, error) {
-	return state.StartConsensus(reqMsg)
+	// Increment the number of consensus atomically in the current view.
+	// TODO: Currently, StartConsensus must succeed.
+	newTotalConsensus := atomic.AddInt64(&node.TotalConsensus, 1)
+
+	return state.StartConsensus(reqMsg, newTotalConsensus)
 }
 
 func (node *Node) prePrepare(state consensus.PBFT, prePrepareMsg *consensus.PrePrepareMsg) (*consensus.VoteMsg, error) {
@@ -421,7 +423,15 @@ func (node *Node) prePrepare(state consensus.PBFT, prePrepareMsg *consensus.PreP
 	// garbage collection and to prevent a faulty primary from exhausting
 	// the space of sequence numbers by selecting a very large one.
 
-	return state.PrePrepare(prePrepareMsg)
+	prepareMsg, err := state.PrePrepare(prePrepareMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Increment the number of consensus atomically in the current view.
+	atomic.AddInt64(&node.TotalConsensus, 1)
+
+	return prepareMsg, err
 }
 
 // Even though the state has passed prepare stage, the node can receive
@@ -438,7 +448,6 @@ func (node *Node) commit(state consensus.PBFT, commitMsg *consensus.VoteMsg) (*c
 
 func (node *Node) updateView(viewID int64) {
 	node.View.ID = viewID
-	node.View.LastSequenceID = 0
 	viewIdx := viewID % int64(len(node.NodeTable))
 	node.View.Primary = node.NodeTable[viewIdx]
 
