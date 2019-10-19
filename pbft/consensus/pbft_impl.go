@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 )
 
 type State struct {
@@ -22,11 +23,14 @@ type MsgLogs struct {
 	ReqMsg        *RequestMsg
 	PrepareMsgs   map[string]*VoteMsg
 	CommitMsgs    map[string]*VoteMsg
+
+	PrepareMsgsMutex sync.Mutex
+	CommitMsgsMutex  sync.Mutex
 }
 
 // lastSequenceID will be -1 if there is no last sequence ID.
-func CreateState(viewID int64, lastSequenceID int64, totNodes int) *State {
-	return &State{
+func CreateState(viewID int64, lastSequenceID int64, totNodes int, primaryID string) *State {
+	state := &State{
 		ViewID: viewID,
 		MsgLogs: &MsgLogs{
 			ReqMsg:nil,
@@ -38,6 +42,12 @@ func CreateState(viewID int64, lastSequenceID int64, totNodes int) *State {
 
 		f: (totNodes - 1) / 3,
 	}
+
+	// !!!HACK!!!: Primary node does not send the PREPARE message.
+	// Add PREPARE pseudo-message from Primary node.
+	state.MsgLogs.PrepareMsgs[primaryID] = nil
+
+	return state
 }
 
 func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) {
@@ -91,11 +101,13 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	}, nil
 }
 
-
 func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 	if err := state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest); err != nil {
 		return nil, errors.New("prepare message is corrupted: " + err.Error() + " (nodeID: " + prepareMsg.NodeID + ")")
 	}
+
+	state.MsgLogs.PrepareMsgsMutex.Lock()
+	defer state.MsgLogs.PrepareMsgsMutex.Unlock()
 
 	// Append msg to its logs
 	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
@@ -127,6 +139,9 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	if err := state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest); err != nil {
 		return nil, nil, errors.New("commit message is corrupted: " + err.Error() + " (nodeID: " + commitMsg.NodeID + ")")
 	}
+
+	state.MsgLogs.CommitMsgsMutex.Lock()
+	defer state.MsgLogs.CommitMsgsMutex.Unlock()
 
 	// Append msg to its logs
 	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg

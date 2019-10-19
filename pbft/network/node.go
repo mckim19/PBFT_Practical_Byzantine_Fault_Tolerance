@@ -15,7 +15,6 @@ type Node struct {
 	View          *View
 	States        map[int64]*consensus.State // key: sequenceID, value: state
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
-	MsgBuffer     *MsgBuffer
 
 	// Channels
 	MsgEntrance   chan interface{}
@@ -23,24 +22,14 @@ type Node struct {
 	MsgExecution  chan *MsgPair
 	MsgOutbound   chan *MsgOut
 	MsgError      chan []error
-	Alarm         chan bool
+
+	// Mutexes for preventing from concurrent access
+	StatesMutex sync.Mutex
 }
 
 type NodeInfo struct {
 	NodeID     string `json:"nodeID"`
 	Url        string `json:"url"`
-}
-
-type MsgBuffer struct {
-	ReqMsgsMutex        sync.Mutex
-	PrePrepareMsgsMutex sync.Mutex
-	PrepareMsgsMutex    sync.Mutex
-	CommitMsgsMutex     sync.Mutex
-
-	ReqMsgs        []*consensus.RequestMsg
-	PrePrepareMsgs []*consensus.PrePrepareMsg
-	PrepareMsgs    []*consensus.VoteMsg
-	CommitMsgs     []*consensus.VoteMsg
 }
 
 type View struct {
@@ -60,14 +49,8 @@ type MsgOut struct {
 	Msg  []byte
 }
 
-// Maximum delay between dispatching and delivering messages.
-const ResolvingTimeDuration = time.Millisecond * 20
-
 // Maximum timeout for any outbound messages.
 const MaxOutboundTimeout = time.Millisecond * 500
-
-// Maximum batch size of messages for creating new consensus.
-const BatchMax = 2
 
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
@@ -78,37 +61,24 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		// Consensus-related struct
 		States: make(map[int64]*consensus.State),
 		CommittedMsgs: make([]*consensus.RequestMsg, 0),
-		MsgBuffer: &MsgBuffer{
-			ReqMsgsMutex:        sync.Mutex{},
-			PrePrepareMsgsMutex: sync.Mutex{},
-			PrepareMsgsMutex:    sync.Mutex{},
-			CommitMsgsMutex:     sync.Mutex{},
-
-			ReqMsgs:        make([]*consensus.RequestMsg, 0),
-			PrePrepareMsgs: make([]*consensus.PrePrepareMsg, 0),
-			PrepareMsgs:    make([]*consensus.VoteMsg, 0),
-			CommitMsgs:     make([]*consensus.VoteMsg, 0),
-		},
 
 		// Channels
-		MsgEntrance: make(chan interface{}),
+		MsgEntrance: make(chan interface{}, len(nodeTable) * 3),
 		MsgDelivery: make(chan interface{}, len(nodeTable) * 3), // TODO: enough?
 		MsgExecution: make(chan *MsgPair),
 		MsgOutbound: make(chan *MsgOut),
 		MsgError: make(chan []error),
-		Alarm: make(chan bool, 1),
 	}
 
 	node.updateView(viewID)
 
-	// Start message dispatcher
-	go node.dispatchMsg()
+	for i := 0; i < 4; i++ {
+		// Start message dispatcher
+		go node.dispatchMsg()
 
-	// Start alarm trigger
-	go node.alarmToDispatcher()
-
-	// Start message resolver
-	go node.resolveMsg()
+		// Start message resolver
+		go node.resolveMsg()
+	}
 
 	// Start message executor
 	go node.executeMsg()
@@ -172,11 +142,13 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	}
 
 	// Register state into node and update last sequence number.
+	node.StatesMutex.Lock()
 	node.States[prePrepareMsg.SequenceID] = state
 	node.View.LastSequenceID = reqMsg.SequenceID
+	node.StatesMutex.Unlock()
 
 	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
-		 state.ViewID, node.View.Primary.NodeID), false)
+		 node.View.ID, node.View.Primary.NodeID), false)
 
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
@@ -204,10 +176,12 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	}
 
 	// Register state into node and update last sequence number.
+	node.StatesMutex.Lock()
 	node.States[prePrepareMsg.SequenceID] = state
 	if node.View.LastSequenceID < prePrepareMsg.SequenceID {
 		node.View.LastSequenceID = prePrepareMsg.SequenceID
 	}
+	node.StatesMutex.Unlock()
 
 	if prePareMsg != nil {
 		// Attach node ID to the message
@@ -216,10 +190,6 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 		LogStage("Pre-prepare", true)
 		node.Broadcast(prePareMsg, "/prepare")
 		LogStage("Prepare", false)
-
-		// !!!HACK!!!: Add PREPARE pseudo-message from Primary node
-		// because Primary node does not send the PREPARE message.
-		state.MsgLogs.PrepareMsgs[node.View.Primary.NodeID] = nil
 	}
 
 	return nil
@@ -228,7 +198,10 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
+	node.StatesMutex.Lock()
 	state := node.States[prepareMsg.SequenceID]
+	node.StatesMutex.Unlock()
+
 	if state == nil {
 		return fmt.Errorf("[Prepare] State for sequence number %d has not created yet.", prepareMsg.SequenceID)
 	}
@@ -253,7 +226,10 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
 
+	node.StatesMutex.Lock()
 	state := node.States[commitMsg.SequenceID]
+	node.StatesMutex.Unlock()
+
 	if state == nil {
 		return fmt.Errorf("[Commit] State for sequence number %d has not created yet.", commitMsg.SequenceID)
 	}
@@ -288,7 +264,7 @@ func (node *Node) createStateForNewConsensus(timeStamp int64) (*consensus.State,
 
 	LogStage("Create the replica status", true)
 
-	return consensus.CreateState(node.View.ID, node.View.LastSequenceID, len(node.NodeTable)), nil
+	return consensus.CreateState(node.View.ID, node.View.LastSequenceID, len(node.NodeTable), node.View.Primary.NodeID), nil
 }
 
 func (node *Node) dispatchMsg() {
@@ -296,8 +272,6 @@ func (node *Node) dispatchMsg() {
 		select {
 		case msg := <-node.MsgEntrance:
 			node.routeMsg(msg)
-		case <-node.Alarm:
-			node.routeMsgWhenAlarmed()
 		}
 	}
 }
@@ -305,231 +279,45 @@ func (node *Node) dispatchMsg() {
 func (node *Node) routeMsg(msgEntered interface{}) {
 	switch msg := msgEntered.(type) {
 	case *consensus.RequestMsg:
-		// Skip if the node is not primary
-		if (node.NodeID != node.View.Primary.NodeID) {
-			break
-		}
-
-		node.MsgBuffer.ReqMsgsMutex.Lock()
-		node.MsgBuffer.ReqMsgs = append(node.MsgBuffer.ReqMsgs, msg)
-		node.MsgBuffer.ReqMsgsMutex.Unlock()
-	case *consensus.PrePrepareMsg:
-		// Skip if the node is primary
+		// Send request message only if the node is primary.
 		if (node.NodeID == node.View.Primary.NodeID) {
-			break
+			node.MsgDelivery <- msg
 		}
-
-		node.MsgBuffer.PrePrepareMsgsMutex.Lock()
-		node.MsgBuffer.PrePrepareMsgs = append(node.MsgBuffer.PrePrepareMsgs, msg)
-		node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
+	case *consensus.PrePrepareMsg:
+		// Send pre-prepare message only if the node is not primary.
+		if (node.NodeID != node.View.Primary.NodeID) {
+			node.MsgDelivery <- msg
+		}
 	case *consensus.VoteMsg:
-		if msg.MsgType == consensus.PrepareMsg {
-			node.MsgBuffer.PrepareMsgsMutex.Lock()
-			node.MsgBuffer.PrepareMsgs = append(node.MsgBuffer.PrepareMsgs, msg)
-			node.MsgBuffer.PrepareMsgsMutex.Unlock()
-		} else if msg.MsgType == consensus.CommitMsg {
-			node.MsgBuffer.CommitMsgsMutex.Lock()
-			node.MsgBuffer.CommitMsgs = append(node.MsgBuffer.CommitMsgs, msg)
-			node.MsgBuffer.CommitMsgsMutex.Unlock()
-		}
+		node.MsgDelivery <- msg
 	}
-}
-
-// Buffered messages for each consensus stage are sequentially processed,
-// starting from getting new request to replying them.
-func (node *Node) routeMsgWhenAlarmed() {
-	// Check ReqMsgs, send them.
-	if len(node.MsgBuffer.ReqMsgs) != 0 {
-		node.deliveryRequestMsgs()
-	}
-
-	// Check PrePrepareMsgs, send them.
-	if len(node.MsgBuffer.PrePrepareMsgs) != 0 {
-		node.deliveryPrePrepareMsgs()
-	}
-
-	// Check PrepareMsgs, send them.
-	if len(node.MsgBuffer.PrepareMsgs) != 0 {
-		node.deliveryPrepareMsgs()
-	}
-
-	// Check CommitMsgs, send them.
-	if len(node.MsgBuffer.CommitMsgs) != 0 {
-		node.deliveryCommitMsgs()
-	}
-}
-
-func (node *Node) deliveryRequestMsgs() {
-	// Copy buffered messages with buffer locked.
-	node.MsgBuffer.ReqMsgsMutex.Lock()
-	msgTotalCnt := len(node.MsgBuffer.ReqMsgs)
-	msgBatchCnt := BatchMax
-	if msgBatchCnt > msgTotalCnt {
-		msgBatchCnt = msgTotalCnt
-	}
-	msgs, buffer := node.MsgBuffer.ReqMsgs[:msgBatchCnt],
-	                node.MsgBuffer.ReqMsgs[msgBatchCnt:]
-
-	// Pop msgs from the buffer and release the buffer lock.
-	node.MsgBuffer.ReqMsgs = buffer
-	node.MsgBuffer.ReqMsgsMutex.Unlock()
-
-	// Send messages.
-	node.MsgDelivery <- msgs
-}
-
-func (node *Node) deliveryPrePrepareMsgs() {
-	// Copy buffered messages with buffer locked.
-	node.MsgBuffer.PrePrepareMsgsMutex.Lock()
-	msgTotalCnt := len(node.MsgBuffer.PrePrepareMsgs)
-	msgBatchCnt := BatchMax
-	if msgBatchCnt > msgTotalCnt {
-		msgBatchCnt = msgTotalCnt
-	}
-	msgs, buffer := node.MsgBuffer.PrePrepareMsgs[:msgBatchCnt],
-	                node.MsgBuffer.PrePrepareMsgs[msgBatchCnt:]
-
-	// Pop msgs from the buffer and release the buffer lock.
-	node.MsgBuffer.PrePrepareMsgs = buffer
-	node.MsgBuffer.PrePrepareMsgsMutex.Unlock()
-
-	// Send messages.
-	node.MsgDelivery <- msgs
-}
-
-func (node *Node) deliveryPrepareMsgs() {
-	// Copy buffered messages with buffer locked.
-	node.MsgBuffer.PrepareMsgsMutex.Lock()
-	msgs := make([]*consensus.VoteMsg, len(node.MsgBuffer.PrepareMsgs))
-	copy(msgs, node.MsgBuffer.PrepareMsgs)
-
-	// Empty the buffer and release the buffer lock.
-	node.MsgBuffer.PrepareMsgs = make([]*consensus.VoteMsg, 0)
-	node.MsgBuffer.PrepareMsgsMutex.Unlock()
-
-	// Send messages.
-	node.MsgDelivery <- msgs
-}
-
-func (node *Node) deliveryCommitMsgs() {
-	// Copy buffered messages with buffer locked.
-	node.MsgBuffer.CommitMsgsMutex.Lock()
-	msgs := make([]*consensus.VoteMsg, len(node.MsgBuffer.CommitMsgs))
-	copy(msgs, node.MsgBuffer.CommitMsgs)
-
-	// Empty the buffer and release the buffer lock.
-	node.MsgBuffer.CommitMsgs = make([]*consensus.VoteMsg, 0)
-	node.MsgBuffer.CommitMsgsMutex.Unlock()
-
-	// Send messages.
-	node.MsgDelivery <- msgs
 }
 
 func (node *Node) resolveMsg() {
 	for {
-		// Get buffered messages from the dispatcher.
-		msgsDelivered := <-node.MsgDelivery
-		switch msgs := msgsDelivered.(type) {
-		case []*consensus.RequestMsg:
-			node.resolveRequestMsg(msgs)
-			// Raise alarm to resolve the remained messages
-			// in the message buffers.
-			node.Alarm <- true
-		case []*consensus.PrePrepareMsg:
-			node.resolvePrePrepareMsg(msgs)
-			// Raise alarm to resolve the remained messages
-			// in the message buffers.
-			node.Alarm <- true
-		case []*consensus.VoteMsg:
-			if len(msgs) == 0 {
-				break
-			}
+		var err error
+		msgDelivered := <-node.MsgDelivery
 
-			if msgs[0].MsgType == consensus.PrepareMsg {
-				node.resolvePrepareMsg(msgs)
-			} else if msgs[0].MsgType == consensus.CommitMsg {
-				node.resolveCommitMsg(msgs)
+		// Resolve the message.
+		switch msg := msgDelivered.(type) {
+		case *consensus.RequestMsg:
+			err = node.GetReq(msg)
+		case *consensus.PrePrepareMsg:
+			err = node.GetPrePrepare(msg)
+		case *consensus.VoteMsg:
+			if msg.MsgType == consensus.PrepareMsg {
+				err = node.GetPrepare(msg)
+			} else if msg.MsgType == consensus.CommitMsg {
+				err = node.GetCommit(msg)
 			}
 		}
-	}
-}
 
-func (node *Node) alarmToDispatcher() {
-	for {
-		time.Sleep(ResolvingTimeDuration)
-		node.Alarm <- true
-	}
-}
-
-func (node *Node) resolveRequestMsg(msgs []*consensus.RequestMsg) {
-	errs := make([]error, 0)
-
-	// Resolve messages
-	for _, reqMsg := range msgs {
-		err := node.GetReq(reqMsg)
 		if err != nil {
-			errs = append(errs, err)
-			// Send message into dispatcher
-			node.MsgEntrance <- reqMsg
+			// Print error.
+			node.MsgError <- []error{err}
+			// Send message into dispatcher.
+			node.MsgEntrance <- msgDelivered
 		}
-	}
-
-	if len(errs) != 0 {
-		node.MsgError <- errs
-	}
-}
-
-func (node *Node) resolvePrePrepareMsg(msgs []*consensus.PrePrepareMsg) {
-	errs := make([]error, 0)
-
-	// Resolve messages
-	for _, prePrepareMsg := range msgs {
-		err := node.GetPrePrepare(prePrepareMsg)
-		if err != nil {
-			errs = append(errs, err)
-			// Send message into dispatcher
-			node.MsgEntrance <- prePrepareMsg
-		}
-	}
-
-	if len(errs) != 0 {
-		node.MsgError <- errs
-	}
-}
-
-func (node *Node) resolvePrepareMsg(msgs []*consensus.VoteMsg) {
-	errs := make([]error, 0)
-
-	// Resolve messages
-	for _, prepareMsg := range msgs {
-		err := node.GetPrepare(prepareMsg)
-		if err != nil {
-			errs = append(errs, err)
-			// Send message into dispatcher
-			node.MsgEntrance <- prepareMsg
-		}
-	}
-
-	if len(errs) != 0 {
-		node.MsgError <- errs
-	}
-}
-
-func (node *Node) resolveCommitMsg(msgs []*consensus.VoteMsg) {
-	errs := make([]error, 0)
-
-	// Resolve messages
-	for _, commitMsg := range msgs {
-		err := node.GetCommit(commitMsg)
-		if err != nil {
-			errs = append(errs, err)
-			// Send message into dispatcher
-			node.MsgEntrance <- commitMsg
-		}
-	}
-
-	if len(errs) != 0 {
-		node.MsgError <- errs
 	}
 }
 
@@ -628,6 +416,11 @@ func (node *Node) startConsensus(state consensus.PBFT, reqMsg *consensus.Request
 }
 
 func (node *Node) prePrepare(state consensus.PBFT, prePrepareMsg *consensus.PrePrepareMsg) (*consensus.VoteMsg, error) {
+	// TODO: From TOCS: sequence number n is between a low water mark h
+	// and a high water mark H. The last condition is necessary to enable
+	// garbage collection and to prevent a faulty primary from exhausting
+	// the space of sequence numbers by selecting a very large one.
+
 	return state.PrePrepare(prePrepareMsg)
 }
 
