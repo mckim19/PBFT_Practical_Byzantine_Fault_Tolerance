@@ -136,7 +136,8 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 		return nil, nil
 	}
 
-	if state.prepared() {
+	// Return commit message only once.
+	if int(newTotalPrepareMsg) == 2*state.f && state.prepared() {
 		// Change the stage to prepared.
 		state.CurrentStage = Prepared
 
@@ -182,7 +183,8 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 		return nil, nil, nil
 	}
 
-	if state.committed() {
+	// Return reply message only once.
+	if int(newTotalCommitMsg) == 2*state.f && state.committed() {
 		// Change the stage to committed.
 		state.CurrentStage = Committed
 		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", state.SequenceID)
@@ -233,7 +235,7 @@ func (state *State) prepared() bool {
 		return false
 	}
 
-	if int(state.MsgLogs.TotalPrepareMsg) < 2*state.f {
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalPrepareMsg)) < 2*state.f {
 		return false
 	}
 
@@ -250,7 +252,7 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if int(state.MsgLogs.TotalCommitMsg) < 2*state.f {
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.f {
 		return false
 	}
 
