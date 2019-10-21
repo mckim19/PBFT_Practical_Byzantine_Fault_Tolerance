@@ -15,6 +15,7 @@ type Node struct {
 	NodeTable     []*NodeInfo
 	View          *View
 	States        map[int64]*consensus.State // key: sequenceID, value: state
+	CurrentViewChangeState *consensus.ViewChangeState
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
 	TotalConsensus int64 // atomic. number of consensus started so far.
 
@@ -62,6 +63,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		// Consensus-related struct
 		States: make(map[int64]*consensus.State),
 		CommittedMsgs: make([]*consensus.RequestMsg, 0),
+		CurrentViewChangeState: nil,
 
 		// Channels
 		MsgEntrance: make(chan interface{}, len(nodeTable) * 3),
@@ -116,6 +118,22 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 	}
 }
 
+func (node *Node) NewView(msg *consensus.NewViewMsg) error {
+		// Print all committed messages.
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	send(node.NodeTable[node.View.Primary] + "/newview", jsonMsg)
+
+	LogStage("NewView", false) 
+
+	return nil
+
+}
+
+
 func (node *Node) Reply(msg *consensus.ReplyMsg) {
 	jsonMsg, err := json.Marshal(msg)
 	if err != nil {
@@ -125,6 +143,21 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 
 	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
 	node.MsgOutbound <- &MsgOut{Path: node.View.Primary.Url + "/reply", Msg: jsonMsg}
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
+	LogStage("ViewChange", false) //ViewChange_Start
+
+	node.CurrentViewChangeState = consensus.CreateViewChangeState(node.NodeID, node.View.ID)
+	viewChangeMsg, err := node.CurrentViewChangeState.For_ViewChange()
+	if err != nil {
+		return err
+	}
+
+	
+	node.Broadcast(viewChangeMsg, "/viewchange")
+/////////////////////////////////////////////////////////////////////////////////////////
 }
 
 // Consensus start procedure for the Primary.
@@ -251,6 +284,40 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	return nil
 }
 
+func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
+	LogMsg(viewchangeMsg)
+
+
+	if node.CurrentViewChangeState == nil || node.CurrentViewChangeState.CurrentStage != consensus.ViewChanged {
+		return nil
+	}
+
+	//newViewMsg, err := node.CurrentViewChangeState.ViewChange(viewchangeMsg)
+	newView, err := node.CurrentViewChangeState.ViewChange(viewchangeMsg)
+	if err != nil {
+		return err
+	}
+
+
+	fmt.Printf("CurrentViewChangeState.ViewID %d\n", node.CurrentViewChangeState.ViewID)
+
+	if newView != nil {
+
+		node.View.ID = viewchangeMsg.NextViewID
+
+		LogStage("ViewChange", true)
+		node.NewView(newView)
+		LogStage("NewView", true)
+
+	}
+
+	return nil
+}
+
+func (node *Node) GetNewView(msg *consensus.NewViewMsg) {
+	fmt.Printf("NewView: %d by %s\n", msg.NextViewID, msg.NodeID)
+}
+
 func (node *Node) GetReply(msg *consensus.ReplyMsg) {
 	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
 }
@@ -308,6 +375,8 @@ func (node *Node) resolveMsg() {
 			} else if msg.MsgType == consensus.CommitMsg {
 				err = node.GetCommit(msg)
 			}
+		case *consensus.ViewChangeMsg:
+			err = node.GetViewChange(msg)
 		}
 
 		if err != nil {

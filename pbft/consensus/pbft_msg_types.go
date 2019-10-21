@@ -33,6 +33,24 @@ type VoteMsg struct {
 	MsgType           `json:"msgType"`
 }
 
+
+type ViewChangeMsg struct {
+	NextViewID  int64  `json:"nextviewID"`
+	NodeID      string `json:"nodeID"`
+	//StableCheckPoint int64
+	//C checkpointmsg_set 2f+1
+	//P a set of preprepare + (preparemsg * 2f+1) from stablecheckpoint to the biggest sequence_num that node received
+
+}
+
+type NewViewMsg struct{
+	NextViewID  int64  `json:"nextviewID"`
+	NodeID      string `json:"nodeID"`
+	//V a set containing the valid ViewChageMsg
+	//O a set of PrePrepareMsgs from latest stable checkpoint(min-s) in V to the highest sequence number(max-s) in a PrepareMsg in V
+	//  new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s  
+}
+
 type MsgType int
 const (
 	PrepareMsg MsgType = iota
