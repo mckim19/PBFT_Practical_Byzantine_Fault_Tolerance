@@ -19,7 +19,8 @@ fi
 
 TOTALNODE=$1
 NODELISTPATH="/tmp/node.list"
-LOGPATH="logs/`date "+%F_%T"`"
+LOGDATE=`date "+%F_%T"`
+LOGPATH="logs/$LOGDATE"
 
 mkdir -p $LOGPATH
 
@@ -28,6 +29,9 @@ then
 	echo "Logging directory $LOGPATH cannot be accessed!"
 	exit
 fi
+
+# Update symbolic link for the recent logs.
+rm "logs/recent" && ln -s $LOGDATE "logs/recent"
 
 echo "Logs are saved in $LOGPATH"
 echo ""
