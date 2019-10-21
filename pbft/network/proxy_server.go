@@ -52,6 +52,9 @@ func (server *Server) setRoute() {
 	http.HandleFunc("/prepare", server.getPrepare)
 	http.HandleFunc("/commit", server.getCommit)
 	http.HandleFunc("/reply", server.getReply)
+	http.HandleFunc("/viewchange", server.getViewChange)
+	http.HandleFunc("/newview", server.getNewView)
+
 }
 
 func (server *Server) getReq(writer http.ResponseWriter, request *http.Request) {
@@ -110,14 +113,38 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 	server.node.GetReply(&msg)
 }
 
+func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Request) {
+
+	var msg consensus.ViewChangeMsg
+	err := json.NewDecoder(request.Body).Decode(&msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	
+	server.node.MsgEntrance <- &msg
+}
+
+func (server *Server) getNewView(writer http.ResponseWriter, request *http.Request) {
+	var msg consensus.NewViewMsg
+	err := json.NewDecoder(request.Body).Decode(&msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	server.node.GetNewView(&msg)
+}
+
 func send(errCh chan<- error, url string, msg []byte) {
 	buff := bytes.NewBuffer(msg)
 	c := &http.Client{}
 
 	resp, err := c.Post("http://" + url, "application/json", buff)
-	errCh <- err
-
-	if err == nil {
-		defer resp.Body.Close()
+	if err != nil {
+		return err
 	}
+	defer resp.Body.Close()
+
+	return nil
 }
