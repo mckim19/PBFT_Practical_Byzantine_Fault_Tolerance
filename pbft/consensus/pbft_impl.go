@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 type State struct {
@@ -24,6 +25,9 @@ type MsgLogs struct {
 	PrepareMsgs   map[string]*VoteMsg
 	CommitMsgs    map[string]*VoteMsg
 
+	TotalPrepareMsg  int32 // atomic
+	TotalCommitMsg   int32 // atomic
+
 	PrepareMsgsMutex sync.Mutex
 	CommitMsgsMutex  sync.Mutex
 }
@@ -35,6 +39,9 @@ func CreateState(viewID int64, totNodes int, primaryID string) *State {
 			ReqMsg:nil,
 			PrepareMsgs:make(map[string]*VoteMsg),
 			CommitMsgs:make(map[string]*VoteMsg),
+
+			TotalPrepareMsg: 0,
+			TotalCommitMsg: 0,
 		},
 		CurrentStage: Idle,
 
@@ -113,12 +120,13 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 
 	// Append msg to its logs
 	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
+	newTotalPrepareMsg := atomic.AddInt32(&state.MsgLogs.TotalPrepareMsg, 1)
 
 	// Print current voting status
-	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
+	fmt.Printf("[Prepare-Vote]: %d, sequence number: %d\n", newTotalPrepareMsg, prepareMsg.SequenceID)
 
 	// Return nil if the state has already passed prepared stage.
-	if len(state.MsgLogs.PrepareMsgs) > 2*state.f {
+	if int(newTotalPrepareMsg) > 2*state.f {
 		return nil, nil
 	}
 
@@ -147,18 +155,20 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 
 	// Append msg to its logs
 	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
+	newTotalCommitMsg := atomic.AddInt32(&state.MsgLogs.TotalCommitMsg, 1)
 
 	// Print current voting status
-	fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
+	fmt.Printf("[Commit-Vote]: %d, sequence number: %d\n", newTotalCommitMsg, commitMsg.SequenceID)
 
 	// Return nil if the state has already passed commited stage.
-	if len(state.MsgLogs.CommitMsgs) > 2*state.f {
+	if int(newTotalCommitMsg) > 2*state.f {
 		return nil, nil, nil
 	}
 
 	if state.committed() {
-		// Change the stage to prepared.
+		// Change the stage to committed.
 		state.CurrentStage = Committed
+		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", commitMsg.SequenceID)
 
 		return &ReplyMsg{
 			ViewID: state.ViewID,
@@ -206,7 +216,7 @@ func (state *State) prepared() bool {
 		return false
 	}
 
-	if len(state.MsgLogs.PrepareMsgs) < 2*state.f {
+	if int(state.MsgLogs.TotalPrepareMsg) < 2*state.f {
 		return false
 	}
 
@@ -223,7 +233,7 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if len(state.MsgLogs.CommitMsgs) < 2*state.f {
+	if int(state.MsgLogs.TotalCommitMsg) < 2*state.f {
 		return false
 	}
 

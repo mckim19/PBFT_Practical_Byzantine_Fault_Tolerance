@@ -26,7 +26,7 @@ type Node struct {
 	MsgError      chan []error
 
 	// Mutexes for preventing from concurrent access
-	StatesMutex sync.Mutex
+	StatesMutex sync.RWMutex
 }
 
 type NodeInfo struct {
@@ -196,9 +196,9 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
-	node.StatesMutex.Lock()
+	node.StatesMutex.RLock()
 	state := node.States[prepareMsg.SequenceID]
-	node.StatesMutex.Unlock()
+	node.StatesMutex.RUnlock()
 
 	if state == nil {
 		return fmt.Errorf("[Prepare] State for sequence number %d has not created yet.", prepareMsg.SequenceID)
@@ -224,9 +224,9 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
 
-	node.StatesMutex.Lock()
+	node.StatesMutex.RLock()
 	state := node.States[commitMsg.SequenceID]
-	node.StatesMutex.Unlock()
+	node.StatesMutex.RUnlock()
 
 	if state == nil {
 		return fmt.Errorf("[Commit] State for sequence number %d has not created yet.", commitMsg.SequenceID)
@@ -346,7 +346,7 @@ func (node *Node) executeMsg() {
 			}
 
 			// Stop execution if the message for the
-			// next sequence is not ready to execute.
+			// current sequence is not ready to execute.
 			p := pairs[lastSequenceID + 1]
 			if p == nil {
 				break
@@ -368,7 +368,7 @@ func (node *Node) executeMsg() {
 			LogStage("Reply", true)
 
 			// Delete the current message pair.
-			delete(pairs, lastSequenceID)
+			delete(pairs, lastSequenceID + 1)
 		}
 
 		// Print all committed messages.
