@@ -386,10 +386,11 @@ func (node *Node) executeMsg() {
 func (node *Node) sendMsg() {
 	for {
 		msg := <-node.MsgOutbound
-		errCh := make(chan error, 1)
 
 		// Goroutine for concurrent send() with timeout
 		go func() {
+			errCh := make(chan error, 1)
+
 			// Goroutine for concurrent send()
 			go func() {
 				send(errCh, msg.Path, msg.Msg)
