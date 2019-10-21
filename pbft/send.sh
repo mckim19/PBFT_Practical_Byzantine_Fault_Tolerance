@@ -7,7 +7,7 @@ if [ $# -lt 4 ]
 then
 	echo "Usage: $0 <bytes for dummy size> <# of messages> <period in second> <address of primary node>"
 	echo "       Human readable format is acceptable (i.e., 1K equals 1024)"
-	echo "Example: ./send.sh 1K 3 0.5 http://localhost:1112"
+	echo "Example: $0 1K 3 0.5 http://localhost:1112"
 	echo "Send 3 dummy request messages (1024 bytes for each) 0.5 seconds to http://localhost:1112/req"
 
 	exit

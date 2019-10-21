@@ -13,11 +13,11 @@ func Hash(content []byte) string {
 }
 
 func Digest(object interface{}) (string, error) {
-        msg, err := json.Marshal(object)
+	msg, err := json.Marshal(object)
 
-        if err != nil {
-                return "", err
-        }
+	if err != nil {
+		return "", err
+	}
 
-        return Hash(msg), nil
+	return Hash(msg), nil
 }
