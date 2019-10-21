@@ -31,7 +31,7 @@ then
 fi
 
 # Update symbolic link for the recent logs.
-rm "logs/recent" && ln -s $LOGDATE "logs/recent"
+rm -f "logs/recent" && ln -s $LOGDATE "logs/recent"
 
 echo "Logs are saved in $LOGPATH"
 echo ""

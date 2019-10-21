@@ -4,6 +4,7 @@ import (
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
 	"fmt"
+	"time"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,12 @@ type MsgOut struct {
 	Path string
 	Msg  []byte
 }
+
+// Cooling time to escape frequent error, or message sending retry.
+const CoolingTime = time.Millisecond * 20
+
+// Number of error messages to start cooling.
+const CoolingTotalErrMsg = 100
 
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
@@ -400,9 +407,18 @@ func (node *Node) sendMsg() {
 }
 
 func (node *Node) logErrorMsg() {
+	coolingMsgLeft := CoolingTotalErrMsg
+
 	for {
 		errs := <-node.MsgError
 		for _, err := range errs {
+			coolingMsgLeft--
+			if coolingMsgLeft == 0 {
+				fmt.Printf("%d error messages detected! cool down for %d milliseconds\n",
+				           CoolingTotalErrMsg, CoolingTime / time.Millisecond)
+				time.Sleep(CoolingTime)
+				coolingMsgLeft = CoolingTotalErrMsg
+			}
 			fmt.Println(err)
 		}
 	}
