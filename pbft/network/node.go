@@ -385,20 +385,24 @@ func (node *Node) sendMsg() {
 		msg := <-node.MsgOutbound
 		errCh := make(chan error, 1)
 
+		// Goroutine for concurrent send() with timeout
 		go func() {
-			send(errCh, msg.Path, msg.Msg)
-		}()
+			// Goroutine for concurrent send()
+			go func() {
+				send(errCh, msg.Path, msg.Msg)
+			}()
 
-		select {
-		case err := <-errCh:
-			if err != nil {
-				node.MsgError <- []error{err}
+			select {
+			case err := <-errCh:
+				if err != nil {
+					node.MsgError <- []error{err}
+					// TODO: view change.
+				}
+			case <-time.After(MaxOutboundTimeout):
+				node.MsgError <- []error{errors.New("out of time :(")}
 				// TODO: view change.
 			}
-		case <-time.After(MaxOutboundTimeout):
-			node.MsgError <- []error{errors.New("out of time :(")}
-			// TODO: view change.
-		}
+		}()
 	}
 }
 
