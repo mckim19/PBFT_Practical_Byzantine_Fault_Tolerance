@@ -51,6 +51,7 @@ func CreateState(viewID int64, totNodes int, primaryID string) *State {
 	// !!!HACK!!!: Primary node does not send the PREPARE message.
 	// Add PREPARE pseudo-message from Primary node.
 	state.MsgLogs.PrepareMsgs[primaryID] = nil
+	atomic.AddInt32(&state.MsgLogs.TotalPrepareMsg, 1)
 
 	return state
 }
@@ -115,11 +116,10 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 		return nil, errors.New("prepare message is corrupted: " + err.Error() + " (nodeID: " + prepareMsg.NodeID + ")")
 	}
 
-	state.MsgLogs.PrepareMsgsMutex.Lock()
-	defer state.MsgLogs.PrepareMsgsMutex.Unlock()
-
 	// Append msg to its logs
+	state.MsgLogs.PrepareMsgsMutex.Lock()
 	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
+	state.MsgLogs.PrepareMsgsMutex.Unlock()
 	newTotalPrepareMsg := atomic.AddInt32(&state.MsgLogs.TotalPrepareMsg, 1)
 
 	// Print current voting status
@@ -146,15 +146,19 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 }
 
 func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
+	// Check the current state is prepared.
+	if !state.prepared() {
+		return nil, nil, fmt.Errorf("The stage is not prepared: sequenceID = %d", state.SequenceID)
+	}
+
 	if err := state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest); err != nil {
 		return nil, nil, errors.New("commit message is corrupted: " + err.Error() + " (nodeID: " + commitMsg.NodeID + ")")
 	}
 
-	state.MsgLogs.CommitMsgsMutex.Lock()
-	defer state.MsgLogs.CommitMsgsMutex.Unlock()
-
 	// Append msg to its logs
+	state.MsgLogs.CommitMsgsMutex.Lock()
 	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
+	state.MsgLogs.CommitMsgsMutex.Unlock()
 	newTotalCommitMsg := atomic.AddInt32(&state.MsgLogs.TotalCommitMsg, 1)
 
 	// Print current voting status
@@ -168,7 +172,7 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	if state.committed() {
 		// Change the stage to committed.
 		state.CurrentStage = Committed
-		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", commitMsg.SequenceID)
+		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", state.SequenceID)
 
 		return &ReplyMsg{
 			ViewID: state.ViewID,
