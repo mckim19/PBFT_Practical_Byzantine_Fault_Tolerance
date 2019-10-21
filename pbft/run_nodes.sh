@@ -2,7 +2,7 @@
 RED='\033[0;31m'
 NC='\033[0m'
 
-if [ $# -lt 1 ]
+if [[ $# -lt 1 ]]
 then
 	echo "Usage: $0 <# of nodes>"
 	echo "Example: $0 4"
@@ -18,25 +18,31 @@ then
 fi
 
 TOTALNODE=$1
+NODELISTPATH="/tmp/node.list"
+LOGPATH="logs/`date "+%F_%T"`"
 
-if [ ! -d "logs" ]
+mkdir -p $LOGPATH
+
+if [[ $? -eq 0 ]] && [[ ! -d $LOGPATH ]]
 then
-	echo "Logging directory 'logs' does not exist!"
+	echo "Logging directory $LOGPATH cannot be accessed!"
 	exit
 fi
 
+echo "Logs are saved in $LOGPATH"
+echo ""
 echo "Try to spawn $TOTALNODE nodes"
 
-echo `awk -v N=$1 -f nodelist.awk /dev/null` > /tmp/node.list
+echo `awk -v N=$1 -f nodelist.awk /dev/null` > $NODELISTPATH
 
 for i in `seq 1 $1`
 do
 	nodename="Node$i"
 
 	echo "node $nodename spawned!"
-	(NODENAME=$nodename; ./main $NODENAME /tmp/node.list 2>&1 > "logs/$NODENAME.log") &
+	(NODENAME=$nodename; ./main $NODENAME $NODELISTPATH 2>&1 > "$LOGPATH/$NODENAME.log") &
 done
 
-echo "$TOTALNODE nodes are running"
+printf "${RED}$TOTALNODE nodes are running${NC}\n"
 echo "(wait)"
 wait
