@@ -9,12 +9,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"bytes"
+	"time"
 )
 
 type Server struct {
 	url string
 	node *Node
 }
+
+// Maximum timeout for any outbound messages.
+const MaxOutboundTimeout = time.Second * 3
 
 func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
 	nodeIdx := int(-1)
@@ -112,7 +116,9 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 
 func send(errCh chan<- error, url string, msg []byte) {
 	buff := bytes.NewBuffer(msg)
-	c := &http.Client{}
+	c := &http.Client{
+		Timeout: MaxOutboundTimeout,
+	}
 
 	resp, err := c.Post("http://" + url, "application/json", buff)
 	errCh <- err

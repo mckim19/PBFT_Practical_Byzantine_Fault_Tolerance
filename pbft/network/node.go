@@ -4,7 +4,6 @@ import (
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
 	"fmt"
-	"time"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -49,9 +48,6 @@ type MsgOut struct {
 	Path string
 	Msg  []byte
 }
-
-// Maximum timeout for any outbound messages.
-const MaxOutboundTimeout = time.Millisecond * 500
 
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
@@ -398,9 +394,6 @@ func (node *Node) sendMsg() {
 					node.MsgError <- []error{err}
 					// TODO: view change.
 				}
-			case <-time.After(MaxOutboundTimeout):
-				node.MsgError <- []error{errors.New("out of time :(")}
-				// TODO: view change.
 			}
 		}()
 	}
