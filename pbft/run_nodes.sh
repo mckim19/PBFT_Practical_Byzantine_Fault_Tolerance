@@ -23,12 +23,22 @@ LOGDATE=`date "+%F_%T"`
 LOGPATH="logs/$LOGDATE"
 
 mkdir -p $LOGPATH
-
-if [[ $? -eq 0 ]] && [[ ! -d $LOGPATH ]]
+exitcode=$?
+if [[ $exitcode -ne 0 ]] || [[ ! -d $LOGPATH ]]
 then
 	echo "Logging directory $LOGPATH cannot be accessed!"
 	exit
 fi
+
+# Build binary file first.
+go build main.go
+exitcode=$?
+if [[ $EXITCODE -ne 0 ]]
+then
+	echo "Build Error! (exit code: $exitcode)"
+	exit
+fi
+echo "Build suceeded"
 
 # Update symbolic link for the recent logs.
 rm -f "logs/recent" && ln -s $LOGDATE "logs/recent"
