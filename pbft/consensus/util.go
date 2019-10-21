@@ -3,6 +3,7 @@ package consensus
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 )
 
 func Hash(content []byte) string {
@@ -11,3 +12,12 @@ func Hash(content []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+func Digest(object interface{}) (string, error) {
+        msg, err := json.Marshal(object)
+
+        if err != nil {
+                return "", err
+        }
+
+        return Hash(msg), nil
+}

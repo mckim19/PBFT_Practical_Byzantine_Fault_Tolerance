@@ -1,7 +1,6 @@
 package consensus
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -72,7 +71,7 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	state.MsgLogs.ReqMsg = request
 
 	// Get the digest of the request message
-	digest, err := digest(request)
+	digest, err := Digest(request)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +197,7 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 		return fmt.Errorf("state.SequenceID = %d, sequenceID = %d", state.SequenceID, sequenceID)
 	}
 
-	digest, err := digest(state.MsgLogs.ReqMsg)
+	digest, err := Digest(state.MsgLogs.ReqMsg)
 	if err != nil {
 		return err
 	}
@@ -242,14 +241,4 @@ func (state *State) committed() bool {
 	}
 
 	return true
-}
-
-func digest(object interface{}) (string, error) {
-	msg, err := json.Marshal(object)
-
-	if err != nil {
-		return "", err
-	}
-
-	return Hash(msg), nil
 }

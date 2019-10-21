@@ -372,8 +372,10 @@ func (node *Node) executeMsg() {
 		}
 
 		// Print all committed messages.
-		for idx, v := range committedMsgs {
-			fmt.Printf("committedMsgs[%d]: %#v\n", idx, v)
+		for _, v := range committedMsgs {
+			digest, _ := consensus.Digest(v.Data)
+			fmt.Printf("***committedMsgs[%d]: clientID=%s, operation=%s, timestamp=%d, data(digest)=%s***\n",
+			           v.SequenceID, v.ClientID, v.Operation, v.Timestamp, digest)
 		}
 	}
 }
