@@ -3,12 +3,14 @@
 package network
 
 import (
+	"github.com/gorilla/websocket"
 	"net/http"
+	"net/url"
 
-	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
-	"encoding/json"
-	"fmt"
-	"bytes"
+	//"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
+	//"encoding/json"
+	"log"
+	"time"
 )
 
 type Server struct {
@@ -26,97 +28,87 @@ func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
 	}
 
 	if nodeIdx == -1 {
-		fmt.Printf("Node '%s' does not exist!\n", nodeID)
+		log.Printf("Node '%s' does not exist!\n", nodeID)
 		return nil
 	}
 
 	node := NewNode(nodeID, nodeTable, viewID)
 	server := &Server{nodeTable[nodeIdx].Url, node}
 
-	server.setRoute()
+	hub := NewHub()
+	go hub.run()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		ServeWs(hub, w, r)
+	}
+	http.HandleFunc("/req", handler)
+	http.HandleFunc("/preprepare", handler)
+	http.HandleFunc("/prepare", handler)
+	http.HandleFunc("/commit", handler)
+	http.HandleFunc("/reply", handler)
 
 	return server
 }
 
 func (server *Server) Start() {
-	fmt.Printf("Server will be started at %s...\n", server.url)
+	log.Printf("Server will be started at %s...\n", server.url)
+
+	go server.DialOtherNodes()
+
 	if err := http.ListenAndServe(server.url, nil); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 }
 
-func (server *Server) setRoute() {
-	http.HandleFunc("/req", server.getReq)
-	http.HandleFunc("/preprepare", server.getPrePrepare)
-	http.HandleFunc("/prepare", server.getPrepare)
-	http.HandleFunc("/commit", server.getCommit)
-	http.HandleFunc("/reply", server.getReply)
-}
+func (server *Server) DialOtherNodes() {
+	// Sleep until all nodes perform ListenAndServ().
+	time.Sleep(time.Second * 2)
 
-func (server *Server) getReq(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.RequestMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
+	for _, nodeInfo := range server.node.NodeTable {
+		u := url.URL{Scheme: "ws", Host: nodeInfo.Url, Path: "/req"}
+		log.Printf("connecting to %s", u.String())
+
+		c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		if err != nil {
+			log.Fatal("dial:", err)
+		}
+		defer c.Close()
+
+		if nodeInfo.NodeID != server.node.NodeID {
+			go server.receiveLoop(c, nodeInfo)
+		} else {
+			go server.sendLoop(c)
+		}
 	}
 
-	server.node.MsgEntrance <- &msg
+	time.Sleep(time.Second * 1000000)
 }
 
-func (server *Server) getPrePrepare(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.PrePrepareMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
+func (server *Server) receiveLoop(c *websocket.Conn, nodeInfo *NodeInfo) {
+	for {
+		_, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			return
+		}
+		log.Printf("%s recv: %s", server.node.NodeID, message)
 	}
-
-	server.node.MsgEntrance <- &msg
 }
 
-func (server *Server) getPrepare(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.VoteMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
+func (server *Server) sendLoop(c *websocket.Conn) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			dummyReq := "{\"operation\": \"Op1\", \"clientID\": \"Client1\", \"data\": \"JJWEJPQOWJE\", \"timestamp\": 190283901}"
+			err := c.WriteMessage(websocket.TextMessage, []byte(dummyReq))
+			if err != nil {
+				log.Println("write:", err)
+				return
+			}
+		}
 		return
-	}
-	fmt.Println(msg)
-
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getCommit(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.VoteMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getReply(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.ReplyMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.GetReply(&msg)
-}
-
-func send(errCh chan<- error, c *http.Client, url string, msg []byte) {
-	buff := bytes.NewBuffer(msg)
-
-	resp, err := c.Post("http://" + url, "application/json", buff)
-	errCh <- err
-
-	if err == nil {
-		defer resp.Body.Close()
 	}
 }

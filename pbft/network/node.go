@@ -405,7 +405,7 @@ func (node *Node) sendMsg() {
 	sem := make(chan bool, MaxOutboundConnection)
 
 	for {
-		msg := <-node.MsgOutbound
+		//msg := <-node.MsgOutbound
 
 		// Goroutine for concurrent send() with timeout
 		sem <- true
@@ -415,7 +415,7 @@ func (node *Node) sendMsg() {
 
 			// Goroutine for concurrent send()
 			go func() {
-				send(errCh, node.HttpClient, msg.Path, msg.Msg)
+				//send(errCh, node.HttpClient, msg.Path, msg.Msg)
 			}()
 
 			select {
