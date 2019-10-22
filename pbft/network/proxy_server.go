@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	//"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
+	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	//"encoding/json"
 	"log"
 	"time"
@@ -64,6 +64,8 @@ func (server *Server) DialOtherNodes() {
 	// Sleep until all nodes perform ListenAndServ().
 	time.Sleep(time.Second * 2)
 
+	var thisNodeInfo *NodeInfo
+
 	for _, nodeInfo := range server.node.NodeTable {
 		u := url.URL{Scheme: "ws", Host: nodeInfo.Url, Path: "/req"}
 		log.Printf("connecting to %s", u.String())
@@ -77,9 +79,11 @@ func (server *Server) DialOtherNodes() {
 		if nodeInfo.NodeID != server.node.NodeID {
 			go server.receiveLoop(c, nodeInfo)
 		} else {
-			go server.sendLoop(c)
+			thisNodeInfo = nodeInfo
 		}
 	}
+
+	go server.sendLoop(thisNodeInfo)
 
 	time.Sleep(time.Second * 1000000)
 }
@@ -91,24 +95,38 @@ func (server *Server) receiveLoop(c *websocket.Conn, nodeInfo *NodeInfo) {
 			log.Println("read:", err)
 			return
 		}
-		log.Printf("%s recv: %s", server.node.NodeID, message)
+		log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
 	}
 }
 
-func (server *Server) sendLoop(c *websocket.Conn) {
-	ticker := time.NewTicker(time.Second)
+func (server *Server) sendLoop(nodeInfo *NodeInfo) {
+	ticker := time.NewTicker(time.Millisecond * 200)
 	defer ticker.Stop()
+
+	dummy := make([]byte, 1500000)
+	for i := range dummy {
+		dummy[i] = 'A'
+	}
+	dummy[len(dummy) - 1] = 0
+
+	u := url.URL{Scheme: "ws", Host: nodeInfo.Url, Path: "/req"}
+	log.Printf("connecting to %s", u.String())
 
 	for {
 		select {
 		case <-ticker.C:
-			dummyReq := "{\"operation\": \"Op1\", \"clientID\": \"Client1\", \"data\": \"JJWEJPQOWJE\", \"timestamp\": 190283901}"
-			err := c.WriteMessage(websocket.TextMessage, []byte(dummyReq))
+			//dummyReq := "{\"operation\": \"Op1\", \"clientID\": \"Client1\", \"data\": \"JJWEJPQOWJE\", \"timestamp\": 190283901}"
+			c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+			if err != nil {
+				log.Fatal("dial:", err)
+			}
+
+			err = c.WriteMessage(websocket.TextMessage, dummy)
 			if err != nil {
 				log.Println("write:", err)
 				return
 			}
+			c.Close()
 		}
-		return
 	}
 }

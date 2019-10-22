@@ -10,10 +10,10 @@ import (
 
 const (
 	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
+	writeWait = 1 * time.Second
 
 	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	pongWait = 3 * time.Second
 
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
@@ -56,7 +56,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		log.Println("RECV:", message)
+		//log.Println("RECV:", message)
 		c.hub.broadcast <- message
 	}
 }
@@ -100,6 +100,7 @@ func (c *Client) writePump() {
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Println("Ping error!")
 				return
 			}
 		}
