@@ -119,19 +119,6 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 	}
 }
 
-func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
-	
-	LogMsg(newviewMsg)
-
-	//send(node.NodeTable[node.View.ID] + "/newview", jsonMsg)
-	node.Broadcast(newviewMsg, "/newview")
-	LogStage("NewView", false) 
-
-	return nil
-
-}
-
-
 func (node *Node) Reply(msg *consensus.ReplyMsg) {
 	jsonMsg, err := json.Marshal(msg)
 	if err != nil {
@@ -144,21 +131,10 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 
 
 
-/////////////////////////////////////////////////////////////////////////////////////////
-	LogStage("ViewChange", false) //ViewChange_Start
 
-	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID)
-	viewChangeMsg, err := node.ViewChangeState.For_ViewChange()
-	if err != nil {
-		node.MsgError <- []error{err}
-		return
-	}
+	//ViewChange for test
+	node.StartViewChange()
 
-	
-	node.Broadcast(viewChangeMsg, "/viewchange")
-
-
-/////////////////////////////////////////////////////////////////////////////////////////
 }
 
 // Consensus start procedure for the Primary.
@@ -285,6 +261,44 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	return nil
 }
 
+func (node *Node) GetReply(msg *consensus.ReplyMsg) {
+	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
+}
+
+
+func (node * Node) StartViewChange() {
+
+	//Start_ViewChange
+	LogStage("ViewChange", false) //ViewChange_Start
+
+	//Change View and Primary
+	node.updateView(node.View.ID + 1)
+
+	//Create ViewChangeState 
+	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID)
+	
+	//Create ViewChangeMsg 
+	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg()
+	if err != nil {
+		node.MsgError <- []error{err}
+		return
+	}
+
+	node.Broadcast(viewChangeMsg, "/viewchange")
+}
+
+
+func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
+	LogMsg(newviewMsg)
+
+
+	node.Broadcast(newviewMsg, "/newview")
+	LogStage("NewView", true) 
+
+	return nil
+}
+
+
 func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	LogMsg(viewchangeMsg)
 
@@ -300,32 +314,25 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	}
 
 
-	fmt.Printf("ViewChangeState.ViewID %d\n", node.ViewChangeState.ViewID)
+	LogStage("ViewChange", true)
 
-	if newView != nil {
+	if newView != nil && node.View.Primary.NodeID == node.NodeID {
 
-		node.updateView(node.View.ID + 1)
 
-		LogStage("ViewChange", true)
-
-		if(node.View.Primary.NodeID == node.NodeID){
-			node.NewView(newView)
-		}
-
-		LogStage("NewView", true)
+		LogStage("NewView", false)
+		node.NewView(newView)
 
 	}
 
 	return nil
 }
 
-func (node *Node) GetNewView(msg *consensus.NewViewMsg) {
+func (node *Node) GetNewView(msg *consensus.NewViewMsg) error{
 	fmt.Printf("NewView: %d by %s\n", msg.NextViewID, msg.NodeID)
+	return nil
 }
 
-func (node *Node) GetReply(msg *consensus.ReplyMsg) {
-	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
-}
+
 
 func (node *Node) createState(timeStamp int64) (*consensus.State, error) {
 	// TODO: From TOCS: To guarantee exactly once semantics,
@@ -386,6 +393,8 @@ func (node *Node) resolveMsg() {
 			}
 		case *consensus.ViewChangeMsg:
 			err = node.GetViewChange(msg)
+		case *consensus.NewViewMsg:
+			err = node.GetNewView(msg)
 		}
 
 		if err != nil {

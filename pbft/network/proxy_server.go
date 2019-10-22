@@ -114,7 +114,6 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 }
 
 func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Request) {
-
 	var msg consensus.ViewChangeMsg
 	err := json.NewDecoder(request.Body).Decode(&msg)
 	if err != nil {
