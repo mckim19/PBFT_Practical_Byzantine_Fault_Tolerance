@@ -133,7 +133,7 @@ func (server *Server) getNewView(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	server.node.GetNewView(&msg)
+	server.node.MsgEntrance <- &msg
 }
 
 func send(errCh chan<- error, url string, msg []byte) {
@@ -141,10 +141,10 @@ func send(errCh chan<- error, url string, msg []byte) {
 	c := &http.Client{}
 
 	resp, err := c.Post("http://" + url, "application/json", buff)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	errCh <- err
 
-	return nil
+	if err == nil {
+		defer resp.Body.Close()
+	}
 }
+

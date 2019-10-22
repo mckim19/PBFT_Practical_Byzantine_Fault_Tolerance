@@ -15,7 +15,7 @@ type Node struct {
 	NodeTable     []*NodeInfo
 	View          *View
 	States        map[int64]*consensus.State // key: sequenceID, value: state
-	CurrentViewChangeState *consensus.ViewChangeState
+	ViewChangeState *consensus.ViewChangeState
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
 	TotalConsensus int64 // atomic. number of consensus started so far.
 
@@ -63,7 +63,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		// Consensus-related struct
 		States: make(map[int64]*consensus.State),
 		CommittedMsgs: make([]*consensus.RequestMsg, 0),
-		CurrentViewChangeState: nil,
+		ViewChangeState: nil,
 
 		// Channels
 		MsgEntrance: make(chan interface{}, len(nodeTable) * 3),
@@ -75,6 +75,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 
 	atomic.StoreInt64(&node.TotalConsensus, 0)
 	node.updateView(viewID)
+
 
 	for i := 0; i < 4; i++ {
 		// Start message dispatcher
@@ -118,15 +119,12 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 	}
 }
 
-func (node *Node) NewView(msg *consensus.NewViewMsg) error {
-		// Print all committed messages.
-	jsonMsg, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
+func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
+	
+	LogMsg(newviewMsg)
 
-	send(node.NodeTable[node.View.Primary] + "/newview", jsonMsg)
-
+	//send(node.NodeTable[node.View.ID] + "/newview", jsonMsg)
+	node.Broadcast(newviewMsg, "/newview")
 	LogStage("NewView", false) 
 
 	return nil
@@ -149,14 +147,17 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 /////////////////////////////////////////////////////////////////////////////////////////
 	LogStage("ViewChange", false) //ViewChange_Start
 
-	node.CurrentViewChangeState = consensus.CreateViewChangeState(node.NodeID, node.View.ID)
-	viewChangeMsg, err := node.CurrentViewChangeState.For_ViewChange()
+	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID)
+	viewChangeMsg, err := node.ViewChangeState.For_ViewChange()
 	if err != nil {
-		return err
+		node.MsgError <- []error{err}
+		return
 	}
 
 	
 	node.Broadcast(viewChangeMsg, "/viewchange")
+
+
 /////////////////////////////////////////////////////////////////////////////////////////
 }
 
@@ -288,25 +289,29 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	LogMsg(viewchangeMsg)
 
 
-	if node.CurrentViewChangeState == nil || node.CurrentViewChangeState.CurrentStage != consensus.ViewChanged {
+	if node.ViewChangeState == nil || node.ViewChangeState.CurrentStage != consensus.ViewChanged {
 		return nil
 	}
 
-	//newViewMsg, err := node.CurrentViewChangeState.ViewChange(viewchangeMsg)
-	newView, err := node.CurrentViewChangeState.ViewChange(viewchangeMsg)
+	//newViewMsg, err := node.ViewChangeState.ViewChange(viewchangeMsg)
+	newView, err := node.ViewChangeState.ViewChange(viewchangeMsg)
 	if err != nil {
 		return err
 	}
 
 
-	fmt.Printf("CurrentViewChangeState.ViewID %d\n", node.CurrentViewChangeState.ViewID)
+	fmt.Printf("ViewChangeState.ViewID %d\n", node.ViewChangeState.ViewID)
 
 	if newView != nil {
 
-		node.View.ID = viewchangeMsg.NextViewID
+		node.updateView(node.View.ID + 1)
 
 		LogStage("ViewChange", true)
-		node.NewView(newView)
+
+		if(node.View.Primary.NodeID == node.NodeID){
+			node.NewView(newView)
+		}
+
 		LogStage("NewView", true)
 
 	}
@@ -354,6 +359,10 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.VoteMsg:
+		node.MsgDelivery <- msg
+	case *consensus.ViewChangeMsg:
+		node.MsgDelivery <- msg
+	case *consensus.NewViewMsg:
 		node.MsgDelivery <- msg
 	}
 }
@@ -514,6 +523,12 @@ func (node *Node) prepare(state consensus.PBFT, prepareMsg *consensus.VoteMsg) (
 func (node *Node) commit(state consensus.PBFT, commitMsg *consensus.VoteMsg) (*consensus.ReplyMsg, *consensus.RequestMsg, error) {
 	return state.Commit(commitMsg)
 }
+
+/*
+func (node *Node) viewchange(state consensus.PBFT, viewchageMsg *consensus.ViewChangeMsg) (*consensus.NewViewMsg, error) {
+	return state.Viewchange(viewchageMsg)
+}
+*/
 
 func (node *Node) updateView(viewID int64) {
 	node.View.ID = viewID
