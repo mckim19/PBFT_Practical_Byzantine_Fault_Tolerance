@@ -3,6 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+<<<<<<< HEAD
+=======
+	"github.com/bigpicturelabs/consensusPBFT/pbft/network"
+>>>>>>> master
 	"os"
 
 	"github.com/bigpicturelabs/consensusPBFT/pbft/network"
