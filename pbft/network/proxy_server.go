@@ -6,9 +6,10 @@ import (
 	"net/http"
 
 	"bytes"
-	"consensus"
 	"encoding/json"
 	"fmt"
+
+	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
 type Server struct {

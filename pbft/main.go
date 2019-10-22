@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"network"
 	"os"
+
+	"github.com/bigpicturelabs/consensusPBFT/pbft/network"
 )
 
 // Hard-coded for test.
