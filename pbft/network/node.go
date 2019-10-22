@@ -3,6 +3,8 @@ package network
 import (
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
+	"net"
+	"net/http"
 	"fmt"
 	"time"
 	"errors"
@@ -17,6 +19,7 @@ type Node struct {
 	States        map[int64]*consensus.State // key: sequenceID, value: state
 	CommittedMsgs []*consensus.RequestMsg // kinda block.
 	TotalConsensus int64 // atomic. number of consensus started so far.
+	HttpClient    *http.Client
 
 	// Channels
 	MsgEntrance   chan interface{}
@@ -56,6 +59,9 @@ const CoolingTime = time.Millisecond * 20
 // Number of error messages to start cooling.
 const CoolingTotalErrMsg = 100
 
+// Number of outbound connection for a node.
+const MaxOutboundConnection = 10
+
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
 		NodeID: nodeID,
@@ -72,6 +78,18 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgExecution: make(chan *MsgPair),
 		MsgOutbound: make(chan *MsgOut),
 		MsgError: make(chan []error),
+	}
+
+	node.HttpClient = &http.Client{
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 10 * time.Second,
+			}).Dial,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
 	}
 
 	atomic.StoreInt64(&node.TotalConsensus, 0)
@@ -384,16 +402,20 @@ func (node *Node) executeMsg() {
 }
 
 func (node *Node) sendMsg() {
+	sem := make(chan bool, MaxOutboundConnection)
+
 	for {
 		msg := <-node.MsgOutbound
 
 		// Goroutine for concurrent send() with timeout
+		sem <- true
 		go func() {
+			defer func() { <-sem }()
 			errCh := make(chan error, 1)
 
 			// Goroutine for concurrent send()
 			go func() {
-				send(errCh, msg.Path, msg.Msg)
+				send(errCh, node.HttpClient, msg.Path, msg.Msg)
 			}()
 
 			select {

@@ -33,7 +33,7 @@ fi
 # Build binary file first.
 go build main.go
 exitcode=$?
-if [[ $EXITCODE -ne 0 ]]
+if [[ $exitcode -ne 0 ]]
 then
 	echo "Build Error! (exit code: $exitcode)"
 	exit
