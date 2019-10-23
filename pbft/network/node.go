@@ -294,16 +294,20 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 	switch msg := msgEntered.(type) {
 	case *consensus.RequestMsg:
 		// Send request message only if the node is primary.
-		if (node.MyInfo.NodeID == node.View.Primary.NodeID) {
+		if node.MyInfo.NodeID == node.View.Primary.NodeID {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.PrePrepareMsg:
 		// Send pre-prepare message only if the node is not primary.
-		if (node.MyInfo.NodeID != node.View.Primary.NodeID) {
+		if node.MyInfo.NodeID != node.View.Primary.NodeID {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.VoteMsg:
-		node.MsgDelivery <- msg
+		// Messages are broadcasted from the node, so
+		// the message sent to itself can exist.
+		if node.MyInfo.NodeID != msg.NodeID {
+			node.MsgDelivery <- msg
+		}
 	case *consensus.ReplyMsg:
 		node.MsgDelivery <- msg
 	}
