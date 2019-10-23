@@ -3,8 +3,6 @@ package network
 import (
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
-	"net"
-	"net/http"
 	"fmt"
 	"time"
 	"errors"
@@ -20,7 +18,6 @@ type Node struct {
 	ViewChangeState *consensus.ViewChangeState
 	CommittedMsgs   []*consensus.RequestMsg // kinda block.
 	TotalConsensus  int64 // atomic. number of consensus started so far.
-	HttpClient      *http.Client
 
 	// Channels
 	MsgEntrance   chan interface{}
@@ -89,18 +86,6 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgError: make(chan []error),
 		StableCheckPoint:  0,
 		CheckPointMsgsLog: make(map[int64]map[string]*consensus.CheckPointMsg),
-	}
-
-	node.HttpClient = &http.Client{
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 10 * time.Second,
-			}).Dial,
-			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 5 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
 	}
 
 	atomic.StoreInt64(&node.TotalConsensus, 0)
