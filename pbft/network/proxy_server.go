@@ -1,8 +1,7 @@
 // TODO: secure connection such as HTTPS, or manual implementation
 // from Section 5.2.2 Key Exchanges on TOCS.
 package network
-
-import (
+ import (
 	"net/http"
 
 	"bytes"
@@ -54,6 +53,9 @@ func (server *Server) setRoute() {
 	http.HandleFunc("/commit", server.getCommit)
 	http.HandleFunc("/reply", server.getReply)
 	http.HandleFunc("/checkpoint", server.getCheckPoint)
+	http.HandleFunc("/viewchange", server.getViewChange)
+	http.HandleFunc("/newview", server.getNewView)
+
 }
 
 func (server *Server) getReq(writer http.ResponseWriter, request *http.Request) {
@@ -123,6 +125,28 @@ func (server *Server) getCheckPoint(writer http.ResponseWriter, request *http.Re
 	server.node.MsgEntrance <- &msg
 }
 
+func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Request) {
+	var msg consensus.ViewChangeMsg
+	err := json.NewDecoder(request.Body).Decode(&msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	
+	server.node.MsgEntrance <- &msg
+}
+
+func (server *Server) getNewView(writer http.ResponseWriter, request *http.Request) {
+	var msg consensus.NewViewMsg
+	err := json.NewDecoder(request.Body).Decode(&msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	server.node.MsgEntrance <- &msg
+}
+
 func send(errCh chan<- error, c *http.Client, url string, msg []byte) {
 	buff := bytes.NewBuffer(msg)
 
@@ -133,3 +157,4 @@ func send(errCh chan<- error, c *http.Client, url string, msg []byte) {
 		defer resp.Body.Close()
 	}
 }
+
