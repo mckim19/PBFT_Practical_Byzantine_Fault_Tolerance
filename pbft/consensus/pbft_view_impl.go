@@ -13,7 +13,7 @@ type ViewChangeState struct {
 	ViewChangeMsgLogs   *ViewChangeMsgLogs
 	CurrentStage   ViewChangeStage
 	NodeID		   string
-
+	StableCheckPoint int64
 	// f: the number of Byzantine faulty nodes
 	// f = (n-1) / 3
 	// e.g., n = 5, f = 1
@@ -39,7 +39,7 @@ const (
 )
 
 
-func CreateViewChangeState(nodeID string, totNodes int, viewID int64) *ViewChangeState {
+func CreateViewChangeState(nodeID string, totNodes int, viewID int64, stablecheckpoint int64) *ViewChangeState {
 	return &ViewChangeState{
 		ViewID: viewID,
 		ViewChangeMsgLogs: &ViewChangeMsgLogs{
@@ -49,16 +49,11 @@ func CreateViewChangeState(nodeID string, totNodes int, viewID int64) *ViewChang
 		},
 		CurrentStage: ViewIdle,
 		NodeID : nodeID,
+		StableCheckPoint: stablecheckpoint,
 
 		f: (totNodes - 1) / 3,
 	}
 }
-
-
-func StartViewChange(nodeID string) {
-
-
-} 
 
 
 func (viewchangestate *ViewChangeState) CreateViewChangeMsg() (*ViewChangeMsg, error) {
@@ -67,8 +62,9 @@ func (viewchangestate *ViewChangeState) CreateViewChangeMsg() (*ViewChangeMsg, e
 
 
 	return &ViewChangeMsg{
-		NextViewID: ((viewchangestate.ViewID + 1) % int64(3*viewchangestate.f +1)),
 		NodeID: viewchangestate.NodeID,
+		NextViewID: ((viewchangestate.ViewID + 1) % int64(3*viewchangestate.f +1)),
+		StableCheckPoint: viewchangestate.StableCheckPoint,
 	}, nil
 
 
@@ -89,7 +85,7 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	newTotalViewchangeMsg := atomic.AddInt32(&viewchangestate.ViewChangeMsgLogs.TotalViewChangeMsg,1)
 
 	// Print current voting status
-	fmt.Printf("[ViewChange-Vote]: %d\n", newTotalViewchangeMsg)
+	fmt.Printf("[<<<<<<<<ViewChange-Vote>>>>>>>>>>]: %d\n", newTotalViewchangeMsg)
 
 
 	if int(newTotalViewchangeMsg) > 2*viewchangestate.f {

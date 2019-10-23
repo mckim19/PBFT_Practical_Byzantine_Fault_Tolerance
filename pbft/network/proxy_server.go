@@ -133,7 +133,7 @@ func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	
-	server.node.MsgEntrance <- &msg
+	server.node.ViewMsgEntrance <- &msg
 }
 
 func (server *Server) getNewView(writer http.ResponseWriter, request *http.Request) {
@@ -144,7 +144,7 @@ func (server *Server) getNewView(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	server.node.MsgEntrance <- &msg
+	server.node.ViewMsgEntrance <- &msg
 }
 
 func send(errCh chan<- error, c *http.Client, url string, msg []byte) {

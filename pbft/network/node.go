@@ -24,11 +24,12 @@ type Node struct {
 	HttpClient      *http.Client
 
 	// Channels
-	MsgEntrance  chan interface{}
-	MsgDelivery  chan interface{}
-	MsgExecution chan *MsgPair
-	MsgOutbound  chan *MsgOut
-	MsgError     chan []error
+	MsgEntrance  	chan interface{}
+	ViewMsgEntrance chan interface{}
+	MsgDelivery  	chan interface{}
+	MsgExecution 	chan *MsgPair
+	MsgOutbound  	chan *MsgOut
+	MsgError     	chan []error
 
 	// Mutexes for preventing from concurrent access
 	StatesMutex sync.RWMutex
@@ -86,6 +87,7 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 
 		// Channels
 		MsgEntrance:       make(chan interface{}, len(nodeTable)*3),
+		ViewMsgEntrance:   make(chan interface{}, len(nodeTable)*3),  
 		MsgDelivery:       make(chan interface{}, len(nodeTable)*3), // TODO: enough?
 		MsgExecution:      make(chan *MsgPair),
 		MsgOutbound:       make(chan *MsgOut),
@@ -162,9 +164,6 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 
 	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
 	node.MsgOutbound <- &MsgOut{Path: node.View.Primary.Url + "/reply", Msg: jsonMsg}
-
-	//ViewChange for test
-	node.StartViewChange()
 
 }
 
@@ -309,11 +308,13 @@ func (node *Node) StartViewChange() {
 	//Start_ViewChange
 	LogStage("ViewChange", false) //ViewChange_Start
 
+	close(node.MsgEntrance)
+
 	//Change View and Primary
 	node.updateView(node.View.ID + 1)
 
 	//Create ViewChangeState
-	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID)
+	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID, node.StableCheckPoint)
 
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg()
@@ -360,7 +361,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 }
 
 func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
-	fmt.Printf("NewView: %d by %s\n", msg.NextViewID, msg.NodeID)
+	fmt.Printf("<<<<<<<<NewView>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
 	return nil
 }
 
@@ -379,6 +380,8 @@ func (node *Node) dispatchMsg() {
 		select {
 		case msg := <-node.MsgEntrance:
 			node.routeMsg(msg)
+		case viewmsg := <-node.ViewMsgEntrance:
+			node.routeMsg(viewmsg)
 		}
 	}
 }
@@ -433,6 +436,8 @@ func (node *Node) resolveMsg() {
 		case *consensus.NewViewMsg:
 			err = node.GetNewView(msg)
 		}
+
+
 
 		if err != nil {
 			// Print error.
@@ -490,21 +495,26 @@ func (node *Node) executeMsg() {
 
 			node.Reply(p.replyMsg)
 
-			if node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID == node.CheckPointSendPoint+periodCheckPoint {
-				node.CheckPointSendPoint = node.CheckPointSendPoint + periodCheckPoint
+			// if node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID == node.CheckPointSendPoint+periodCheckPoint {
+			// 	node.CheckPointSendPoint = node.CheckPointSendPoint + periodCheckPoint
 
-				SequenceID := node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID
+			// 	SequenceID := node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID
 
-				fmt.Println("Start Check Point! ")
-				node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Lock()
-				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.NodeID, node.CommittedMsgs[len(node.CommittedMsgs)-1])
+			// 	fmt.Println("Start Check Point! ")
+			// 	node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Lock()
+			// 	checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.NodeID, node.CommittedMsgs[len(node.CommittedMsgs)-1])
 
-				node.Broadcast(checkPointMsg, "/checkpoint")
-				node.CheckPoint(SequenceID, checkPointMsg, 1)
-				node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Unlock()
+			// 	node.Broadcast(checkPointMsg, "/checkpoint")
+			// 	node.CheckPoint(SequenceID, checkPointMsg, 1)
+			// 	node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Unlock()
 
-			}
+			// }
+
+
 			LogStage("Reply", true)
+
+			//ViewChange for test
+			node.StartViewChange()
 
 			delete(pairs, lastSequenceID+1)
 		}
