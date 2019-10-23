@@ -124,7 +124,7 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 	state.MsgLogs.PrepareMsgsMutex.Lock()
 	if _, ok := state.MsgLogs.PrepareMsgs[prepareMsg.NodeID]; ok {
 		fmt.Printf("Prepare message from %s is already received, sequence number=%d\n",
-		           prepareMsg.NodeID, state.SequenceID)
+			prepareMsg.NodeID, state.SequenceID)
 		state.MsgLogs.PrepareMsgsMutex.Unlock()
 		return nil, nil
 	}
@@ -134,7 +134,7 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 
 	// Print current voting status
 	fmt.Printf("[Prepare-Vote]: %d, from %s, sequence number: %d\n",
-	           newTotalPrepareMsg, prepareMsg.NodeID, prepareMsg.SequenceID)
+		newTotalPrepareMsg, prepareMsg.NodeID, prepareMsg.SequenceID)
 
 	// Return nil if the state has already passed prepared stage.
 	if int(newTotalPrepareMsg) > 2*state.F {
@@ -142,7 +142,7 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 	}
 
 	// Return commit message only once.
-	if int(newTotalPrepareMsg) == 2*state.f && state.prepared() {
+	if int(newTotalPrepareMsg) == 2*state.F && state.prepared() {
 		// Change the stage to prepared.
 		state.CurrentStage = Prepared
 
@@ -169,31 +169,25 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 
 	// Append msg to its logs
 	state.MsgLogs.CommitMsgsMutex.Lock()
-<<<<<<< HEAD
 
-=======
 	if _, ok := state.MsgLogs.CommitMsgs[commitMsg.NodeID]; ok {
 		fmt.Printf("Commit message from %s is already received, sequence number=%d\n",
-		           commitMsg.NodeID, state.SequenceID)
+			commitMsg.NodeID, state.SequenceID)
 		state.MsgLogs.CommitMsgsMutex.Unlock()
 		return nil, nil, nil
 	}
->>>>>>> master
 	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
 	state.MsgLogs.CommitMsgsMutex.Unlock()
 	newTotalCommitMsg := atomic.AddInt32(&state.MsgLogs.TotalCommitMsg, 1)
 
 	// Print current voting status
 	fmt.Printf("[Commit-Vote]: %d, from %s, sequence number: %d\n",
-	           newTotalCommitMsg, commitMsg.NodeID, commitMsg.SequenceID)
-
+		newTotalCommitMsg, commitMsg.NodeID, commitMsg.SequenceID)
 	// Return nil if the state has already passed commited stage.
 	if int(newTotalCommitMsg) > 2*state.F {
 		return nil, nil, nil
 	}
-
-	// Return reply message only once.
-	if int(newTotalCommitMsg) == 2*state.f && state.committed() {
+	if int(newTotalCommitMsg) == 2*state.F && state.committed() {
 		// Change the stage to committed.
 		state.CurrentStage = Committed
 		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", state.SequenceID)
@@ -244,11 +238,7 @@ func (state *State) prepared() bool {
 		return false
 	}
 
-<<<<<<< HEAD
-	if int(state.MsgLogs.TotalPrepareMsg) < 2*state.F {
-=======
-	if int(atomic.LoadInt32(&state.MsgLogs.TotalPrepareMsg)) < 2*state.f {
->>>>>>> master
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalPrepareMsg)) < 2*state.F {
 		return false
 	}
 
@@ -265,26 +255,9 @@ func (state *State) committed() bool {
 		return false
 	}
 
-<<<<<<< HEAD
-	if int(state.MsgLogs.TotalCommitMsg) < 2*state.F {
-=======
-	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.f {
->>>>>>> master
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.F {
 		return false
 	}
 
 	return true
 }
-<<<<<<< HEAD
-
-func Digest(object interface{}) (string, error) {
-	msg, err := json.Marshal(object)
-
-	if err != nil {
-		return "", err
-	}
-
-	return Hash(msg), nil
-}
-=======
->>>>>>> master
