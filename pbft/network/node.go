@@ -129,14 +129,8 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 }
 
 func (node *Node) Reply(msg *consensus.ReplyMsg) {
-	jsonMsg, err := json.Marshal(msg)
-	if err != nil {
-		node.MsgError <- []error{err}
-		return
-	}
-
 	// Broadcast reply.
-	node.MsgOutbound <- &MsgOut{Path: node.MyInfo.Url + "/reply", Msg: jsonMsg}
+	node.Broadcast(msg, "/reply")
 
 	//ViewChange for test
 	node.StartViewChange()
@@ -641,8 +635,9 @@ func (node *Node) CheckPoint(SequenceID int64, msg *consensus.CheckPointMsg, typ
 		}
 		fmt.Println("MsgLogs History!!")
 		for v, _ := range node.States {
+			digest, _ := consensus.Digest(node.States[v].MsgLogs.ReqMsg)
 			fmt.Println(" Sequence N : ", v)
-			fmt.Println("    === > ReqMsgs : ", node.States[v].MsgLogs.ReqMsg)
+			fmt.Println("    === > ReqMsgs : ", digest)
 			fmt.Println("    === > Preprepare : ", node.States[v].MsgLogs.PrePrepareMsg)
 			fmt.Println("    === > Prepare : ", node.States[v].MsgLogs.PrepareMsgs)
 			fmt.Println("    === > Commit : ", node.States[v].MsgLogs.CommitMsgs)
