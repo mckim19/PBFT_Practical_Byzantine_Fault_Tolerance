@@ -184,7 +184,6 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
 		node.Broadcast(prePrepareMsg, "/preprepare")
-		node.States[prePrepareMsg.SequenceID].MsgLogs.PreprepareMsgs = prePrepareMsg
 		LogStage("Pre-prepare", true)
 	}
 
@@ -202,7 +201,7 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	}
 
 	// Fill sequence number into the state and make the state prepared.
-	prePareMsg, err := node.prePrepare(state, prePrepareMsg)
+	prepareMsg, err := node.prePrepare(state, prePrepareMsg)
 	if err != nil {
 		return err
 	}
@@ -212,15 +211,12 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	node.States[prePrepareMsg.SequenceID] = state
 	node.StatesMutex.Unlock()
 
-	if prePareMsg != nil {
+	if prepareMsg != nil {
 		// Attach node ID to the message
-		prePareMsg.NodeID = node.MyInfo.NodeID
+		prepareMsg.NodeID = node.MyInfo.NodeID
 
 		LogStage("Pre-prepare", true)
-		node.Broadcast(prePareMsg, "/prepare")
-		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgsMutex.Lock()
-		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgs[node.MyInfo.NodeID] = prePareMsg
-		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgsMutex.Unlock()
+		node.Broadcast(prepareMsg, "/prepare")
 		LogStage("Prepare", false)
 	}
 
@@ -249,9 +245,6 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 
 		LogStage("Prepare", true)
 		node.Broadcast(commitMsg, "/commit")
-		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgsMutex.Lock()
-		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgs[node.MyInfo.NodeID] = commitMsg
-		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgsMutex.Unlock()
 		LogStage("Commit", false)
 	}
 
@@ -359,7 +352,7 @@ func (node *Node) createState(timeStamp int64) (*consensus.State, error) {
 
 	LogStage("Create the replica status", true)
 
-	return consensus.CreateState(node.View.ID, len(node.NodeTable), node.View.Primary.NodeID), nil
+	return consensus.CreateState(node.View.ID, node.MyInfo.NodeID, len(node.NodeTable)), nil
 }
 
 func (node *Node) dispatchMsg() {
@@ -391,13 +384,10 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 		}
 	case *consensus.ReplyMsg:
 		node.MsgDelivery <- msg
-
 	case *consensus.CheckPointMsg:
 		node.States[int64(msg.SequenceID)].MsgLogs.CheckPointMutex.Lock()
 		node.CheckPoint(msg.SequenceID, msg, 2)
-
 		node.States[int64(msg.SequenceID)].MsgLogs.CheckPointMutex.Unlock()
-
 	case *consensus.ViewChangeMsg:
 		node.MsgDelivery <- msg
 	case *consensus.NewViewMsg:
@@ -668,7 +658,7 @@ func (node *Node) CheckPoint(SequenceID int64, msg *consensus.CheckPointMsg, typ
 		for v, _ := range node.States {
 			fmt.Println(" Sequence N : ", v)
 			fmt.Println("    === > ReqMsgs : ", node.States[v].MsgLogs.ReqMsg)
-			fmt.Println("    === > Preprepare : ", node.States[v].MsgLogs.PreprepareMsgs)
+			fmt.Println("    === > Preprepare : ", node.States[v].MsgLogs.PrePrepareMsg)
 			fmt.Println("    === > Prepare : ", node.States[v].MsgLogs.PrepareMsgs)
 			fmt.Println("    === > Commit : ", node.States[v].MsgLogs.CommitMsgs)
 		}

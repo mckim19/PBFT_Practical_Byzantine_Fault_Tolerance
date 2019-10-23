@@ -9,6 +9,7 @@ import (
 
 type State struct {
 	ViewID          int64
+	NodeID          string
 	MsgLogs         *MsgLogs
 	SequenceID      int64
 	CurrentStage    Stage
@@ -22,7 +23,7 @@ type State struct {
 
 type MsgLogs struct {
 	ReqMsg         *RequestMsg
-	PreprepareMsgs *PrePrepareMsg
+	PrePrepareMsg  *PrePrepareMsg
 	PrepareMsgs    map[string]*VoteMsg
 	CommitMsgs     map[string]*VoteMsg
 
@@ -34,28 +35,29 @@ type MsgLogs struct {
 	CheckPointMutex  sync.Mutex
 }
 
-func CreateState(viewID int64, totNodes int, primaryID string) *State {
+func CreateState(viewID int64, nodeID string, totNodes int) *State {
 	state := &State{
 		ViewID: viewID,
+		NodeID: nodeID,
 		MsgLogs: &MsgLogs{
 			ReqMsg: nil,
-			PreprepareMsgs: nil,
+			PrePrepareMsg: nil,
 			PrepareMsgs: make(map[string]*VoteMsg),
 			CommitMsgs: make(map[string]*VoteMsg),
 
-			TotalPrepareMsg: 0,
-			TotalCommitMsg: 0,
+			// Setting these counters during consensus is unsafe
+			// because quorum condition check can be skipped.
+			//
+			// Count PRE-PREPARE message from primary node as one PREPARE message.
+			// Count COMMIT message created from the current node as one COMMIT message.
+			TotalPrepareMsg: 1,
+			TotalCommitMsg: 1,
 		},
 		CurrentStage: Idle,
 
 		F: (totNodes - 1) / 3,
 		CheckPointState: 0,
 	}
-
-	// !!!HACK!!!: Primary node does not send the PREPARE message.
-	// Add PREPARE pseudo-message from Primary node.
-	state.MsgLogs.PrepareMsgs[primaryID] = nil
-	atomic.AddInt32(&state.MsgLogs.TotalPrepareMsg, 1)
 
 	return state
 }
@@ -84,18 +86,26 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	// Change the stage to pre-prepared.
 	state.CurrentStage = PrePrepared
 
-	return &PrePrepareMsg{
+	// Create PREPREPARE message.
+	prePrepareMsg := &PrePrepareMsg{
 		ViewID: state.ViewID,
 		SequenceID: request.SequenceID,
 		Digest: digest,
 		RequestMsg: request,
-	}, nil
+	}
+
+	// Accessing to the message log without locking is safe because
+	// nobody except for this node starts consensus at this point,
+	// i.e., the node has not registered this state yet.
+	state.MsgLogs.PrePrepareMsg = prePrepareMsg
+
+	return prePrepareMsg, nil
 }
 
 func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	// Get ReqMsgs and save it to its logs like the primary.
 	state.MsgLogs.ReqMsg = prePrepareMsg.RequestMsg
-	state.MsgLogs.PreprepareMsgs = prePrepareMsg
+	state.MsgLogs.PrePrepareMsg = prePrepareMsg
 
 	// Set sequence number same as PREPREPARE message.
 	state.SequenceID = prePrepareMsg.SequenceID
@@ -108,12 +118,19 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	// Change the stage to pre-prepared.
 	state.CurrentStage = PrePrepared
 
-	return &VoteMsg{
+	// Create PREPARE message.
+	prepareMsg := &VoteMsg{
 		ViewID: state.ViewID,
 		SequenceID: prePrepareMsg.SequenceID,
 		Digest: prePrepareMsg.Digest,
 		MsgType: PrepareMsg,
-	}, nil
+	}
+
+	// Accessing to the message log without locking is safe,
+	// for the same reason as in StartConsensus().
+	state.MsgLogs.PrepareMsgs[state.NodeID] = prepareMsg
+
+	return prepareMsg, nil
 }
 
 func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
@@ -147,12 +164,19 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 		// Change the stage to prepared.
 		state.CurrentStage = Prepared
 
-		return &VoteMsg{
+		// Create COMMIT message.
+		commitMsg := &VoteMsg{
 			ViewID: state.ViewID,
 			SequenceID: prepareMsg.SequenceID,
 			Digest: prepareMsg.Digest,
 			MsgType: CommitMsg,
-		}, nil
+		}
+
+		state.MsgLogs.CommitMsgsMutex.Lock()
+		state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
+		state.MsgLogs.CommitMsgsMutex.Unlock()
+
+		return commitMsg, nil
 	}
 
 	return nil, nil
@@ -184,12 +208,12 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	fmt.Printf("[Commit-Vote]: %d, from %s, sequence number: %d\n",
 	           newTotalCommitMsg, commitMsg.NodeID, commitMsg.SequenceID)
 	// Return nil if the state has already passed commited stage.
-	if int(newTotalCommitMsg) > 2*state.F {
+	if int(newTotalCommitMsg) > 2*state.F + 1 {
 		return nil, nil, nil
 	}
 
 	// Return reply message only once.
-	if int(newTotalCommitMsg) == 2*state.F && state.committed() {
+	if int(newTotalCommitMsg) == 2*state.F + 1 && state.committed() {
 		// Change the stage to committed.
 		state.CurrentStage = Committed
 		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", state.SequenceID)
@@ -236,7 +260,7 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 // view v, and request m. We call this certificate the prepared certificate
 // and we say that the replica "prepared" the request.
 func (state *State) prepared() bool {
-	if state.MsgLogs.ReqMsg == nil {
+	if state.MsgLogs.ReqMsg == nil || state.MsgLogs.PrePrepareMsg == nil {
 		return false
 	}
 
@@ -257,7 +281,7 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.F {
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.F + 1 {
 		return false
 	}
 
