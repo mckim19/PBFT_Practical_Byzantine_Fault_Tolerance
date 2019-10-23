@@ -1,6 +1,7 @@
 package consensus
 
 type Stage int
+
 const (
 	Idle        Stage = iota // Node is created successfully, but the consensus process is not started yet.
 	PrePrepared              // The ReqMsgs is processed successfully. The node is ready to head to the Prepare stage.

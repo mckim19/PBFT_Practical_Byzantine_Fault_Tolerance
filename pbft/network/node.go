@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +20,7 @@ type Node struct {
 	States         map[int64]*consensus.State // key: sequenceID, value: state
 	CommittedMsgs  []*consensus.RequestMsg    // kinda block.
 	TotalConsensus int64                      // atomic. number of consensus started so far.
+	HttpClient     *http.Client
 
 	// Channels
 	MsgEntrance  chan interface{}
@@ -60,6 +63,15 @@ type MsgOut struct {
 const MaxOutboundTimeout = time.Millisecond * 500
 const periodCheckPoint = 5
 
+// Cooling time to escape frequent error, or message sending retry.
+const CoolingTime = time.Millisecond * 20
+
+// Number of error messages to start cooling.
+const CoolingTotalErrMsg = 100
+
+// Number of outbound connection for a node.
+const MaxOutboundConnection = 10
+
 func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
 		NodeID:    nodeID,
@@ -78,6 +90,18 @@ func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgError:          make(chan []error),
 		StableCheckPoint:  0,
 		CheckPointMsgsLog: make(map[int64]map[string]*consensus.CheckPointMsg),
+	}
+
+	node.HttpClient = &http.Client{
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 10 * time.Second,
+			}).Dial,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
 	}
 
 	atomic.StoreInt64(&node.TotalConsensus, 0)
@@ -412,38 +436,55 @@ func (node *Node) executeMsg() {
 		}
 
 		// Print all committed messages.
-		for idx, v := range committedMsgs {
-			fmt.Printf("committedMsgs[%d]: %#v\n", idx, v)
+		for _, v := range committedMsgs {
+			digest, _ := consensus.Digest(v.Data)
+			fmt.Printf("***committedMsgs[%d]: clientID=%s, operation=%s, timestamp=%d, data(digest)=%s***\n",
+				v.SequenceID, v.ClientID, v.Operation, v.Timestamp, digest)
 		}
 	}
 }
 
 func (node *Node) sendMsg() {
+	sem := make(chan bool, MaxOutboundConnection)
+
 	for {
 		msg := <-node.MsgOutbound
-		errCh := make(chan error, 1)
 
+		// Goroutine for concurrent send() with timeout
+		sem <- true
 		go func() {
-			send(errCh, msg.Path, msg.Msg)
-		}()
+			defer func() { <-sem }()
+			errCh := make(chan error, 1)
 
-		select {
-		case err := <-errCh:
-			if err != nil {
-				node.MsgError <- []error{err}
-				// TODO: view change.
+			// Goroutine for concurrent send()
+			go func() {
+				send(errCh, node.HttpClient, msg.Path, msg.Msg)
+			}()
+
+			select {
+			case err := <-errCh:
+				if err != nil {
+					node.MsgError <- []error{err}
+					// TODO: view change.
+				}
 			}
-		case <-time.After(MaxOutboundTimeout):
-			node.MsgError <- []error{errors.New("out of time :(")}
-			// TODO: view change.
-		}
+		}()
 	}
 }
 
 func (node *Node) logErrorMsg() {
+	coolingMsgLeft := CoolingTotalErrMsg
+
 	for {
 		errs := <-node.MsgError
 		for _, err := range errs {
+			coolingMsgLeft--
+			if coolingMsgLeft == 0 {
+				fmt.Printf("%d error messages detected! cool down for %d milliseconds\n",
+					CoolingTotalErrMsg, CoolingTime/time.Millisecond)
+				time.Sleep(CoolingTime)
+				coolingMsgLeft = CoolingTotalErrMsg
+			}
 			fmt.Println(err)
 		}
 	}
