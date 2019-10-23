@@ -1,8 +1,7 @@
 // TODO: secure connection such as HTTPS, or manual implementation
 // from Section 5.2.2 Key Exchanges on TOCS.
 package network
-
-import (
+ import (
 	"net/http"
 
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
