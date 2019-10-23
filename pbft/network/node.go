@@ -295,6 +295,7 @@ func (node * Node) StartViewChange() {
 	//Change View and Primary
 	node.updateView(node.View.ID + 1)
 
+	
 	//Create ViewChangeState 
 	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID)
 	
@@ -312,7 +313,6 @@ func (node * Node) StartViewChange() {
 func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
 	LogMsg(newviewMsg)
 
-
 	node.Broadcast(newviewMsg, "/newview")
 	LogStage("NewView", true) 
 
@@ -327,6 +327,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	if node.ViewChangeState == nil || node.ViewChangeState.CurrentStage != consensus.ViewChanged {
 		return nil
 	}
+
 
 	//newViewMsg, err := node.ViewChangeState.ViewChange(viewchangeMsg)
 	newView, err := node.ViewChangeState.ViewChange(viewchangeMsg)
