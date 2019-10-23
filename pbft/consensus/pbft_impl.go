@@ -1,7 +1,6 @@
 package consensus
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -72,7 +71,7 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	state.MsgLogs.ReqMsg = request
 
 	// Get the digest of the request message
-	digest, err := digest(request)
+	digest, err := Digest(request)
 	if err != nil {
 		return nil, err
 	}
@@ -118,19 +117,27 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 
 	// Append msg to its logs
 	state.MsgLogs.PrepareMsgsMutex.Lock()
+	if _, ok := state.MsgLogs.PrepareMsgs[prepareMsg.NodeID]; ok {
+		fmt.Printf("Prepare message from %s is already received, sequence number=%d\n",
+		           prepareMsg.NodeID, state.SequenceID)
+		state.MsgLogs.PrepareMsgsMutex.Unlock()
+		return nil, nil
+	}
 	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
 	state.MsgLogs.PrepareMsgsMutex.Unlock()
 	newTotalPrepareMsg := atomic.AddInt32(&state.MsgLogs.TotalPrepareMsg, 1)
 
 	// Print current voting status
-	fmt.Printf("[Prepare-Vote]: %d, sequence number: %d\n", newTotalPrepareMsg, prepareMsg.SequenceID)
+	fmt.Printf("[Prepare-Vote]: %d, from %s, sequence number: %d\n",
+	           newTotalPrepareMsg, prepareMsg.NodeID, prepareMsg.SequenceID)
 
 	// Return nil if the state has already passed prepared stage.
 	if int(newTotalPrepareMsg) > 2*state.f {
 		return nil, nil
 	}
 
-	if state.prepared() {
+	// Return commit message only once.
+	if int(newTotalPrepareMsg) == 2*state.f && state.prepared() {
 		// Change the stage to prepared.
 		state.CurrentStage = Prepared
 
@@ -157,19 +164,27 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 
 	// Append msg to its logs
 	state.MsgLogs.CommitMsgsMutex.Lock()
+	if _, ok := state.MsgLogs.CommitMsgs[commitMsg.NodeID]; ok {
+		fmt.Printf("Commit message from %s is already received, sequence number=%d\n",
+		           commitMsg.NodeID, state.SequenceID)
+		state.MsgLogs.CommitMsgsMutex.Unlock()
+		return nil, nil, nil
+	}
 	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
 	state.MsgLogs.CommitMsgsMutex.Unlock()
 	newTotalCommitMsg := atomic.AddInt32(&state.MsgLogs.TotalCommitMsg, 1)
 
 	// Print current voting status
-	fmt.Printf("[Commit-Vote]: %d, sequence number: %d\n", newTotalCommitMsg, commitMsg.SequenceID)
+	fmt.Printf("[Commit-Vote]: %d, from %s, sequence number: %d\n",
+	           newTotalCommitMsg, commitMsg.NodeID, commitMsg.SequenceID)
 
 	// Return nil if the state has already passed commited stage.
 	if int(newTotalCommitMsg) > 2*state.f {
 		return nil, nil, nil
 	}
 
-	if state.committed() {
+	// Return reply message only once.
+	if int(newTotalCommitMsg) == 2*state.f && state.committed() {
 		// Change the stage to committed.
 		state.CurrentStage = Committed
 		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", state.SequenceID)
@@ -198,7 +213,7 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 		return fmt.Errorf("state.SequenceID = %d, sequenceID = %d", state.SequenceID, sequenceID)
 	}
 
-	digest, err := digest(state.MsgLogs.ReqMsg)
+	digest, err := Digest(state.MsgLogs.ReqMsg)
 	if err != nil {
 		return err
 	}
@@ -220,7 +235,7 @@ func (state *State) prepared() bool {
 		return false
 	}
 
-	if int(state.MsgLogs.TotalPrepareMsg) < 2*state.f {
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalPrepareMsg)) < 2*state.f {
 		return false
 	}
 
@@ -237,19 +252,9 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if int(state.MsgLogs.TotalCommitMsg) < 2*state.f {
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.f {
 		return false
 	}
 
 	return true
-}
-
-func digest(object interface{}) (string, error) {
-	msg, err := json.Marshal(object)
-
-	if err != nil {
-		return "", err
-	}
-
-	return Hash(msg), nil
 }

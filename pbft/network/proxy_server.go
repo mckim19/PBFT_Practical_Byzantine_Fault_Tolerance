@@ -134,9 +134,8 @@ func (server *Server) getNewView(writer http.ResponseWriter, request *http.Reque
 	server.node.MsgEntrance <- &msg
 }
 
-func send(errCh chan<- error, url string, msg []byte) {
+func send(errCh chan<- error, c *http.Client, url string, msg []byte) {
 	buff := bytes.NewBuffer(msg)
-	c := &http.Client{}
 
 	resp, err := c.Post("http://" + url, "application/json", buff)
 	errCh <- err
