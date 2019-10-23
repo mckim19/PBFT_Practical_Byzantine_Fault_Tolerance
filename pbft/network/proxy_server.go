@@ -8,7 +8,7 @@ import (
 	"net/url"
 
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
-	//"encoding/json"
+	"encoding/json"
 	"log"
 	"time"
 )
@@ -64,8 +64,6 @@ func (server *Server) DialOtherNodes() {
 	// Sleep until all nodes perform ListenAndServ().
 	time.Sleep(time.Second * 2)
 
-	var thisNodeInfo *NodeInfo
-
 	for _, nodeInfo := range server.node.NodeTable {
 		u := url.URL{Scheme: "ws", Host: nodeInfo.Url, Path: "/req"}
 		log.Printf("connecting to %s", u.String())
@@ -76,16 +74,13 @@ func (server *Server) DialOtherNodes() {
 		}
 		defer c.Close()
 
-		if nodeInfo.NodeID != server.node.NodeID {
-			go server.receiveLoop(c, nodeInfo)
-		} else {
-			thisNodeInfo = nodeInfo
-		}
+		go server.receiveLoop(c, nodeInfo)
 	}
 
-	go server.sendLoop(thisNodeInfo)
+	go server.sendDummyMsg()
 
-	time.Sleep(time.Second * 1000000)
+	// Wait.
+	select {}
 }
 
 func (server *Server) receiveLoop(c *websocket.Conn, nodeInfo *NodeInfo) {
@@ -96,26 +91,38 @@ func (server *Server) receiveLoop(c *websocket.Conn, nodeInfo *NodeInfo) {
 			return
 		}
 		log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
+
+		var msg consensus.RequestMsg
+		err = json.Unmarshal(message, &msg)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		server.node.MsgEntrance <- &msg
 	}
 }
 
-func (server *Server) sendLoop(nodeInfo *NodeInfo) {
-	ticker := time.NewTicker(time.Millisecond * 200)
+func (server *Server) sendDummyMsg() {
+	// Send dummy message from primary node.
+	// TODO: send message from the current (changed) primary node.
+	primaryNode := server.node.View.Primary
+	if primaryNode.NodeID != server.node.NodeID {
+		return
+	}
+
+	// Set periodic send signal.
+	ticker := time.NewTicker(time.Millisecond * 100)
 	defer ticker.Stop()
 
-	dummy := make([]byte, 1500000)
-	for i := range dummy {
-		dummy[i] = 'A'
-	}
-	dummy[len(dummy) - 1] = 0
+	// Create a dummy message.
+	dummy := dummyMsg(1500000, "Op1", "Client1", time.Now().UnixNano())
 
-	u := url.URL{Scheme: "ws", Host: nodeInfo.Url, Path: "/req"}
+	u := url.URL{Scheme: "ws", Host: primaryNode.Url, Path: "/req"}
 	log.Printf("connecting to %s", u.String())
 
 	for {
 		select {
 		case <-ticker.C:
-			//dummyReq := "{\"operation\": \"Op1\", \"clientID\": \"Client1\", \"data\": \"JJWEJPQOWJE\", \"timestamp\": 190283901}"
 			c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 			if err != nil {
 				log.Fatal("dial:", err)
@@ -129,4 +136,28 @@ func (server *Server) sendLoop(nodeInfo *NodeInfo) {
 			c.Close()
 		}
 	}
+}
+
+func dummyMsg(dummySize int, operation string, clientID string, timestamp int64) []byte {
+	var msg consensus.RequestMsg
+	msg.Operation = operation
+	msg.ClientID = clientID
+	msg.Timestamp = timestamp
+
+	data := make([]byte, dummySize)
+	for i := range data {
+		data[i] = 'A'
+	}
+	data[dummySize - 1] = 0
+
+	msg.Data = string(data)
+
+	// {"operation": "Op1", "clientID": "Client1", "data": "JJWEJPQOWJE", "timestamp": 190283901}
+	jsonMsg, err := json.Marshal(&msg)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+
+	return []byte(jsonMsg)
 }
