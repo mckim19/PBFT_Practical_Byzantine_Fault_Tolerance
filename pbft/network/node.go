@@ -13,7 +13,7 @@ import (
 )
 
 type Node struct {
-	NodeID        string
+	MyInfo        *NodeInfo
 	NodeTable     []*NodeInfo
 	View          *View
 	States        map[int64]*consensus.State // key: sequenceID, value: state
@@ -60,11 +60,11 @@ const CoolingTime = time.Millisecond * 20
 const CoolingTotalErrMsg = 100
 
 // Number of outbound connection for a node.
-const MaxOutboundConnection = 10
+const MaxOutboundConnection = 1000
 
-func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
+func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
-		NodeID: nodeID,
+		MyInfo: myInfo,
 		NodeTable: nodeTable,
 		View: &View{},
 
@@ -129,12 +129,7 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 		return
 	}
 
-	for _, nodeInfo := range node.NodeTable {
-		if nodeInfo.NodeID == node.NodeID {
-			continue
-		}
-		node.MsgOutbound <- &MsgOut{Path: nodeInfo.Url + path, Msg: jsonMsg}
-	}
+	node.MsgOutbound <- &MsgOut{Path: node.MyInfo.Url + path, Msg: jsonMsg}
 }
 
 func (node *Node) Reply(msg *consensus.ReplyMsg) {
@@ -144,8 +139,8 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 		return
 	}
 
-	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
-	node.MsgOutbound <- &MsgOut{Path: node.View.Primary.Url + "/reply", Msg: jsonMsg}
+	// Broadcast reply.
+	node.MsgOutbound <- &MsgOut{Path: node.MyInfo.Url + "/reply", Msg: jsonMsg}
 }
 
 // Consensus start procedure for the Primary.
@@ -204,7 +199,7 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 
 	if prePareMsg != nil {
 		// Attach node ID to the message
-		prePareMsg.NodeID = node.NodeID
+		prePareMsg.NodeID = node.MyInfo.NodeID
 
 		LogStage("Pre-prepare", true)
 		node.Broadcast(prePareMsg, "/prepare")
@@ -232,7 +227,7 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 
 	if commitMsg != nil {
 		// Attach node ID to the message
-		commitMsg.NodeID = node.NodeID
+		commitMsg.NodeID = node.MyInfo.NodeID
 
 		LogStage("Prepare", true)
 		node.Broadcast(commitMsg, "/commit")
@@ -264,7 +259,7 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 		}
 
 		// Attach node ID to the message
-		replyMsg.NodeID = node.NodeID
+		replyMsg.NodeID = node.MyInfo.NodeID
 
 		node.MsgExecution <- &MsgPair{replyMsg, committedMsg}
 	}
@@ -299,15 +294,17 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 	switch msg := msgEntered.(type) {
 	case *consensus.RequestMsg:
 		// Send request message only if the node is primary.
-		if (node.NodeID == node.View.Primary.NodeID) {
+		if (node.MyInfo.NodeID == node.View.Primary.NodeID) {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.PrePrepareMsg:
 		// Send pre-prepare message only if the node is not primary.
-		if (node.NodeID != node.View.Primary.NodeID) {
+		if (node.MyInfo.NodeID != node.View.Primary.NodeID) {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.VoteMsg:
+		node.MsgDelivery <- msg
+	case *consensus.ReplyMsg:
 		node.MsgDelivery <- msg
 	}
 }
@@ -329,6 +326,8 @@ func (node *Node) resolveMsg() {
 			} else if msg.MsgType == consensus.CommitMsg {
 				err = node.GetCommit(msg)
 			}
+		case *consensus.ReplyMsg:
+			node.GetReply(msg)
 		}
 
 		if err != nil {
@@ -405,17 +404,17 @@ func (node *Node) sendMsg() {
 	sem := make(chan bool, MaxOutboundConnection)
 
 	for {
-		//msg := <-node.MsgOutbound
+		msg := <-node.MsgOutbound
 
-		// Goroutine for concurrent send() with timeout
+		// Goroutine for concurrent broadcast() with timeout
 		sem <- true
 		go func() {
 			defer func() { <-sem }()
 			errCh := make(chan error, 1)
 
-			// Goroutine for concurrent send()
+			// Goroutine for concurrent broadcast()
 			go func() {
-				//send(errCh, node.HttpClient, msg.Path, msg.Msg)
+				broadcast(errCh, msg.Path, msg.Msg)
 			}()
 
 			select {
