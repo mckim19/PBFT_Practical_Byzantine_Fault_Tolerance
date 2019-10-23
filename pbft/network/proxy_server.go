@@ -1,18 +1,20 @@
 // TODO: secure connection such as HTTPS, or manual implementation
 // from Section 5.2.2 Key Exchanges on TOCS.
 package network
- import (
-	"net/http"
 
-	"bytes"
-	"encoding/json"
-	"fmt"
+import (
+	"github.com/gorilla/websocket"
+	"net/http"
+	"net/url"
 
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
+	"encoding/json"
+	"log"
+	"time"
 )
 
 type Server struct {
-	url  string
+	url string
 	node *Node
 }
 
@@ -26,135 +28,252 @@ func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
 	}
 
 	if nodeIdx == -1 {
-		fmt.Printf("Node '%s' does not exist!\n", nodeID)
+		log.Printf("Node '%s' does not exist!\n", nodeID)
 		return nil
 	}
 
-	node := NewNode(nodeID, nodeTable, viewID)
+	node := NewNode(nodeTable[nodeIdx], nodeTable, viewID)
 	server := &Server{nodeTable[nodeIdx].Url, node}
 
-	server.setRoute()
+	// Normal case.
+	server.setRoute("/req")
+	server.setRoute("/preprepare")
+	server.setRoute("/prepare")
+	server.setRoute("/commit")
+	server.setRoute("/reply")
+
+	// View change.
+	server.setRoute("/checkpoint")
+	server.setRoute("/viewchange")
+	server.setRoute("/newview")
 
 	return server
 }
 
+func (server *Server) setRoute(path string) {
+	hub := NewHub()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		ServeWs(hub, w, r)
+	}
+	http.HandleFunc(path, handler)
+
+	go hub.run()
+}
+
 func (server *Server) Start() {
-	fmt.Printf("Server will be started at %s...\n", server.url)
+	log.Printf("Server will be started at %s...\n", server.url)
+
+	go server.DialOtherNodes()
+
 	if err := http.ListenAndServe(server.url, nil); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 }
 
-func (server *Server) setRoute() {
-	http.HandleFunc("/req", server.getReq)
-	http.HandleFunc("/preprepare", server.getPrePrepare)
-	http.HandleFunc("/prepare", server.getPrepare)
-	http.HandleFunc("/commit", server.getCommit)
-	http.HandleFunc("/reply", server.getReply)
-	http.HandleFunc("/checkpoint", server.getCheckPoint)
-	http.HandleFunc("/viewchange", server.getViewChange)
-	http.HandleFunc("/newview", server.getNewView)
+func (server *Server) DialOtherNodes() {
+	// Sleep until all nodes perform ListenAndServ().
+	time.Sleep(time.Second * 3)
 
+	// Normal case.
+	var cReq = make(map[string]*websocket.Conn)
+	var cPrePrepare = make(map[string]*websocket.Conn)
+	var cPrepare = make(map[string]*websocket.Conn)
+	var cCommit = make(map[string]*websocket.Conn)
+	var cReply = make(map[string]*websocket.Conn)
+
+	// View change.
+	var cCheckPoint = make(map[string]*websocket.Conn)
+	var cViewChange = make(map[string]*websocket.Conn)
+	var cNewView = make(map[string]*websocket.Conn)
+
+	for _, nodeInfo := range server.node.NodeTable {
+		cReq[nodeInfo.NodeID] = server.setReceiveLoop("/req", nodeInfo)
+		cPrePrepare[nodeInfo.NodeID] = server.setReceiveLoop("/preprepare", nodeInfo)
+		cPrepare[nodeInfo.NodeID] = server.setReceiveLoop("/prepare", nodeInfo)
+		cCommit[nodeInfo.NodeID] = server.setReceiveLoop("/commit", nodeInfo)
+		cReply[nodeInfo.NodeID] = server.setReceiveLoop("/reply", nodeInfo)
+
+		cCheckPoint[nodeInfo.NodeID] = server.setReceiveLoop("/checkpoint", nodeInfo)
+		cViewChange[nodeInfo.NodeID] = server.setReceiveLoop("/viewchange", nodeInfo)
+		cNewView[nodeInfo.NodeID] = server.setReceiveLoop("/newview", nodeInfo)
+	}
+
+	go server.sendDummyMsg()
+
+	// Wait.
+	select {}
+
+	//defer c.Close()
 }
 
-func (server *Server) getReq(writer http.ResponseWriter, request *http.Request) {
+func (server *Server) setReceiveLoop(path string, nodeInfo *NodeInfo) *websocket.Conn {
+	u := url.URL{Scheme: "ws", Host: nodeInfo.Url, Path: path}
+	log.Printf("connecting to %s", u.String())
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+		return nil
+	}
+
+	go server.receiveLoop(c, path, nodeInfo)
+
+	return c
+}
+
+func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *NodeInfo) {
+	for {
+		_, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			return
+		}
+		//log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
+
+		switch path {
+		case "/req":
+			var msg consensus.RequestMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/preprepare":
+			var msg consensus.PrePrepareMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/prepare":
+			var msg consensus.VoteMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/commit":
+			var msg consensus.VoteMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/reply":
+			var msg consensus.ReplyMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/checkpoint":
+			var msg consensus.CheckPointMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/viewchange":
+			var msg consensus.ViewChangeMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/newview":
+			var msg consensus.NewViewMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		}
+	}
+}
+
+func (server *Server) sendDummyMsg() {
+	// Send dummy message from primary node.
+	// TODO: send message from the current (changed) primary node.
+	primaryNode := server.node.View.Primary
+	if primaryNode.NodeID != server.node.MyInfo.NodeID {
+		return
+	}
+
+	// Set periodic send signal.
+	ticker := time.NewTicker(time.Millisecond * 400)
+	defer ticker.Stop()
+
+	// Create a dummy message.
+	dummy := dummyMsg((1 << 20), "Op1", "Client1", time.Now().UnixNano())
+
+	u := url.URL{Scheme: "ws", Host: primaryNode.Url, Path: "/req"}
+	log.Printf("connecting to %s", u.String())
+
+	for {
+		select {
+		case <-ticker.C:
+			c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+			if err != nil {
+				log.Fatal("dial:", err)
+			}
+
+			err = c.WriteMessage(websocket.TextMessage, dummy)
+			if err != nil {
+				log.Println("write:", err)
+				return
+			}
+			c.Close()
+		}
+	}
+}
+
+func broadcast(errCh chan<- error, url string, msg []byte) {
+	url = "ws://" + url // Fix using url.URL{}
+	c, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		errCh <- err
+		return
+	}
+
+	err = c.WriteMessage(websocket.TextMessage, msg)
+	if err != nil {
+		errCh <- err
+		return
+	}
+	defer c.Close()
+
+	errCh <- nil
+}
+
+func dummyMsg(dummySize int, operation string, clientID string, timestamp int64) []byte {
 	var msg consensus.RequestMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
+	msg.Operation = operation
+	msg.ClientID = clientID
+	msg.Timestamp = timestamp
+
+	data := make([]byte, dummySize)
+	for i := range data {
+		data[i] = 'A'
+	}
+	data[dummySize - 1] = 0
+
+	msg.Data = string(data)
+
+	// {"operation": "Op1", "clientID": "Client1", "data": "JJWEJPQOWJE", "timestamp": 190283901}
+	jsonMsg, err := json.Marshal(&msg)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Println(err)
+		return nil
 	}
 
-	server.node.MsgEntrance <- &msg
+	return []byte(jsonMsg)
 }
-
-func (server *Server) getPrePrepare(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.PrePrepareMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getPrepare(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.VoteMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	//fmt.Println(msg)
-
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getCommit(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.VoteMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getReply(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.ReplyMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.GetReply(&msg)
-}
-func (server *Server) getCheckPoint(writer http.ResponseWriter, request *http.Request) {
-
-	var msg consensus.CheckPointMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.ViewChangeMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	
-	server.node.MsgEntrance <- &msg
-}
-
-func (server *Server) getNewView(writer http.ResponseWriter, request *http.Request) {
-	var msg consensus.NewViewMsg
-	err := json.NewDecoder(request.Body).Decode(&msg)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	server.node.MsgEntrance <- &msg
-}
-
-func send(errCh chan<- error, c *http.Client, url string, msg []byte) {
-	buff := bytes.NewBuffer(msg)
-
-	resp, err := c.Post("http://"+url, "application/json", buff)
-	errCh <- err
-
-	if err == nil {
-		defer resp.Body.Close()
-	}
-}
-

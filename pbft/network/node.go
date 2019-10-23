@@ -1,34 +1,33 @@
 package network
 
 import (
+	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net"
 	"net/http"
+	"fmt"
+	"time"
+	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
-
-	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
 type Node struct {
-	NodeID          string
+	MyInfo          *NodeInfo
 	NodeTable       []*NodeInfo
 	View            *View
 	States          map[int64]*consensus.State // key: sequenceID, value: state
 	ViewChangeState *consensus.ViewChangeState
 	CommittedMsgs   []*consensus.RequestMsg // kinda block.
-	TotalConsensus  int64                   // atomic. number of consensus started so far.
+	TotalConsensus  int64 // atomic. number of consensus started so far.
 	HttpClient      *http.Client
 
 	// Channels
-	MsgEntrance  chan interface{}
-	MsgDelivery  chan interface{}
-	MsgExecution chan *MsgPair
-	MsgOutbound  chan *MsgOut
-	MsgError     chan []error
+	MsgEntrance   chan interface{}
+	MsgDelivery   chan interface{}
+	MsgExecution  chan *MsgPair
+	MsgOutbound   chan *MsgOut
+	MsgError      chan []error
 
 	// Mutexes for preventing from concurrent access
 	StatesMutex sync.RWMutex
@@ -40,13 +39,13 @@ type Node struct {
 }
 
 type NodeInfo struct {
-	NodeID string `json:"nodeID"`
-	Url    string `json:"url"`
+	NodeID     string `json:"nodeID"`
+	Url        string `json:"url"`
 }
 
 type View struct {
-	ID      int64
-	Primary *NodeInfo
+	ID             int64
+	Primary        *NodeInfo
 }
 
 type MsgPair struct {
@@ -60,8 +59,6 @@ type MsgOut struct {
 	Msg  []byte
 }
 
-// Maximum timeout for any outbound messages.
-const MaxOutboundTimeout = time.Millisecond * 500
 const periodCheckPoint = 5
 
 // Cooling time to escape frequent error, or message sending retry.
@@ -71,25 +68,25 @@ const CoolingTime = time.Millisecond * 20
 const CoolingTotalErrMsg = 100
 
 // Number of outbound connection for a node.
-const MaxOutboundConnection = 10
+const MaxOutboundConnection = 1000
 
-func NewNode(nodeID string, nodeTable []*NodeInfo, viewID int64) *Node {
+func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 	node := &Node{
-		NodeID:    nodeID,
+		MyInfo: myInfo,
 		NodeTable: nodeTable,
-		View:      &View{},
+		View: &View{},
 
 		// Consensus-related struct
-		States:          make(map[int64]*consensus.State),
-		CommittedMsgs:   make([]*consensus.RequestMsg, 0),
+		States: make(map[int64]*consensus.State),
+		CommittedMsgs: make([]*consensus.RequestMsg, 0),
 		ViewChangeState: nil,
 
 		// Channels
-		MsgEntrance:       make(chan interface{}, len(nodeTable)*3),
-		MsgDelivery:       make(chan interface{}, len(nodeTable)*3), // TODO: enough?
-		MsgExecution:      make(chan *MsgPair),
-		MsgOutbound:       make(chan *MsgOut),
-		MsgError:          make(chan []error),
+		MsgEntrance: make(chan interface{}, len(nodeTable) * 3),
+		MsgDelivery: make(chan interface{}, len(nodeTable) * 3), // TODO: enough?
+		MsgExecution: make(chan *MsgPair),
+		MsgOutbound: make(chan *MsgOut),
+		MsgError: make(chan []error),
 		StableCheckPoint:  0,
 		CheckPointMsgsLog: make(map[int64]map[string]*consensus.CheckPointMsg),
 	}
@@ -143,14 +140,7 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 		return
 	}
 
-	for _, nodeInfo := range node.NodeTable {
-
-		if nodeInfo.NodeID == node.NodeID {
-			continue
-		}
-		fmt.Println(node.NodeID, " Broad Cast to :", nodeInfo.NodeID, "Type : ", path)
-		node.MsgOutbound <- &MsgOut{Path: nodeInfo.Url + path, Msg: jsonMsg}
-	}
+	node.MsgOutbound <- &MsgOut{Path: node.MyInfo.Url + path, Msg: jsonMsg}
 }
 
 func (node *Node) Reply(msg *consensus.ReplyMsg) {
@@ -160,12 +150,11 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 		return
 	}
 
-	// Client가 없으므로, 일단 Primary에게 보내는 걸로 처리.
-	node.MsgOutbound <- &MsgOut{Path: node.View.Primary.Url + "/reply", Msg: jsonMsg}
+	// Broadcast reply.
+	node.MsgOutbound <- &MsgOut{Path: node.MyInfo.Url + "/reply", Msg: jsonMsg}
 
 	//ViewChange for test
 	node.StartViewChange()
-
 }
 
 // Consensus start procedure for the Primary.
@@ -190,13 +179,12 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	node.StatesMutex.Unlock()
 
 	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
-		node.View.ID, node.View.Primary.NodeID), false)
+	         node.View.ID, node.View.Primary.NodeID), false)
 
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
 		node.Broadcast(prePrepareMsg, "/preprepare")
 		node.States[prePrepareMsg.SequenceID].MsgLogs.PreprepareMsgs = prePrepareMsg
-
 		LogStage("Pre-prepare", true)
 	}
 
@@ -226,12 +214,12 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 
 	if prePareMsg != nil {
 		// Attach node ID to the message
-		prePareMsg.NodeID = node.NodeID
+		prePareMsg.NodeID = node.MyInfo.NodeID
 
 		LogStage("Pre-prepare", true)
 		node.Broadcast(prePareMsg, "/prepare")
 		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgsMutex.Lock()
-		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgs[node.NodeID] = prePareMsg
+		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgs[node.MyInfo.NodeID] = prePareMsg
 		node.States[prePrepareMsg.SequenceID].MsgLogs.PrepareMsgsMutex.Unlock()
 		LogStage("Prepare", false)
 	}
@@ -257,12 +245,12 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 
 	if commitMsg != nil {
 		// Attach node ID to the message
-		commitMsg.NodeID = node.NodeID
+		commitMsg.NodeID = node.MyInfo.NodeID
 
 		LogStage("Prepare", true)
 		node.Broadcast(commitMsg, "/commit")
 		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgsMutex.Lock()
-		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgs[node.NodeID] = commitMsg
+		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgs[node.MyInfo.NodeID] = commitMsg
 		node.States[prepareMsg.SequenceID].MsgLogs.CommitMsgsMutex.Unlock()
 		LogStage("Commit", false)
 	}
@@ -292,7 +280,7 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 		}
 
 		// Attach node ID to the message
-		replyMsg.NodeID = node.NodeID
+		replyMsg.NodeID = node.MyInfo.NodeID
 
 		node.MsgExecution <- &MsgPair{replyMsg, committedMsg}
 	}
@@ -313,7 +301,7 @@ func (node *Node) StartViewChange() {
 	node.updateView(node.View.ID + 1)
 
 	//Create ViewChangeState
-	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID)
+	node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), node.View.ID)
 
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg()
@@ -349,7 +337,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 
 	LogStage("ViewChange", true)
 
-	if newView != nil && node.View.Primary.NodeID == node.NodeID {
+	if newView != nil && node.View.Primary.NodeID == node.MyInfo.NodeID {
 
 		LogStage("NewView", false)
 		node.NewView(newView)
@@ -387,15 +375,21 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 	switch msg := msgEntered.(type) {
 	case *consensus.RequestMsg:
 		// Send request message only if the node is primary.
-		if node.NodeID == node.View.Primary.NodeID {
+		if node.MyInfo.NodeID == node.View.Primary.NodeID {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.PrePrepareMsg:
 		// Send pre-prepare message only if the node is not primary.
-		if node.NodeID != node.View.Primary.NodeID {
+		if node.MyInfo.NodeID != node.View.Primary.NodeID {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.VoteMsg:
+		// Messages are broadcasted from the node, so
+		// the message sent to itself can exist.
+		if node.MyInfo.NodeID != msg.NodeID {
+			node.MsgDelivery <- msg
+		}
+	case *consensus.ReplyMsg:
 		node.MsgDelivery <- msg
 
 	case *consensus.CheckPointMsg:
@@ -428,6 +422,8 @@ func (node *Node) resolveMsg() {
 			} else if msg.MsgType == consensus.CommitMsg {
 				err = node.GetCommit(msg)
 			}
+		case *consensus.ReplyMsg:
+			node.GetReply(msg)
 		case *consensus.ViewChangeMsg:
 			err = node.GetViewChange(msg)
 		case *consensus.NewViewMsg:
@@ -463,7 +459,7 @@ func (node *Node) executeMsg() {
 			// Find the last committed message.
 			msgTotalCnt := len(node.CommittedMsgs)
 			if msgTotalCnt > 0 {
-				lastCommittedMsg := node.CommittedMsgs[msgTotalCnt-1]
+				lastCommittedMsg := node.CommittedMsgs[msgTotalCnt - 1]
 				lastSequenceID = lastCommittedMsg.SequenceID
 			} else {
 				lastSequenceID = 0
@@ -471,7 +467,7 @@ func (node *Node) executeMsg() {
 
 			// Stop execution if the message for the
 			// current sequence is not ready to execute.
-			p := pairs[lastSequenceID+1]
+			p := pairs[lastSequenceID + 1]
 			if p == nil {
 				break
 			}
@@ -497,7 +493,7 @@ func (node *Node) executeMsg() {
 
 				fmt.Println("Start Check Point! ")
 				node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Lock()
-				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.NodeID, node.CommittedMsgs[len(node.CommittedMsgs)-1])
+				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.CommittedMsgs[len(node.CommittedMsgs)-1])
 
 				node.Broadcast(checkPointMsg, "/checkpoint")
 				node.CheckPoint(SequenceID, checkPointMsg, 1)
@@ -506,14 +502,15 @@ func (node *Node) executeMsg() {
 			}
 			LogStage("Reply", true)
 
-			delete(pairs, lastSequenceID+1)
+			// Delete the current message pair.
+			delete(pairs, lastSequenceID + 1)
 		}
 
 		// Print all committed messages.
 		for _, v := range committedMsgs {
 			digest, _ := consensus.Digest(v.Data)
 			fmt.Printf("***committedMsgs[%d]: clientID=%s, operation=%s, timestamp=%d, data(digest)=%s***\n",
-				v.SequenceID, v.ClientID, v.Operation, v.Timestamp, digest)
+			           v.SequenceID, v.ClientID, v.Operation, v.Timestamp, digest)
 		}
 	}
 }
@@ -524,15 +521,15 @@ func (node *Node) sendMsg() {
 	for {
 		msg := <-node.MsgOutbound
 
-		// Goroutine for concurrent send() with timeout
+		// Goroutine for concurrent broadcast() with timeout
 		sem <- true
 		go func() {
 			defer func() { <-sem }()
 			errCh := make(chan error, 1)
 
-			// Goroutine for concurrent send()
+			// Goroutine for concurrent broadcast()
 			go func() {
-				send(errCh, node.HttpClient, msg.Path, msg.Msg)
+				broadcast(errCh, msg.Path, msg.Msg)
 			}()
 
 			select {
@@ -555,7 +552,7 @@ func (node *Node) logErrorMsg() {
 			coolingMsgLeft--
 			if coolingMsgLeft == 0 {
 				fmt.Printf("%d error messages detected! cool down for %d milliseconds\n",
-					CoolingTotalErrMsg, CoolingTime/time.Millisecond)
+				           CoolingTotalErrMsg, CoolingTime / time.Millisecond)
 				time.Sleep(CoolingTime)
 				coolingMsgLeft = CoolingTotalErrMsg
 			}
@@ -601,12 +598,6 @@ func (node *Node) commit(state consensus.PBFT, commitMsg *consensus.VoteMsg) (*c
 	return state.Commit(commitMsg)
 }
 
-/*
-func (node *Node) viewchange(state consensus.PBFT, viewchageMsg *consensus.ViewChangeMsg) (*consensus.NewViewMsg, error) {
-	return state.Viewchange(viewchageMsg)
-}
-*/
-
 func (node *Node) updateView(viewID int64) {
 	node.View.ID = viewID
 	viewIdx := viewID % int64(len(node.NodeTable))
@@ -629,7 +620,7 @@ func (node *Node) getCheckPointMsg(SequenceID int64, nodeID string, ReqMsgs *con
 }
 func (node *Node) Checkpointchk(SequenceID int64) bool {
 
-	if len(node.CheckPointMsgsLog[int64(SequenceID)]) >= (2*node.States[SequenceID].F+1) && node.CheckPointMsgsLog[int64(SequenceID)][node.NodeID] != nil {
+	if len(node.CheckPointMsgsLog[int64(SequenceID)]) >= (2*node.States[SequenceID].F+1) && node.CheckPointMsgsLog[int64(SequenceID)][node.MyInfo.NodeID] != nil {
 
 		return true
 	}
@@ -642,7 +633,7 @@ func (node *Node) CheckPoint(SequenceID int64, msg *consensus.CheckPointMsg, typ
 		node.CheckPointMsgsLog[int64(SequenceID)] = make(map[string]*consensus.CheckPointMsg)
 	}
 	node.CheckPointMsgsLog[int64(SequenceID)][msg.NodeID] = msg
-	// fmt.Println("Save Checkpoint Msg : ", node.CheckPointMsgsLog[int64(SequenceID)][node.NodeID], "// length : ", len(node.CheckPointMsgsLog[int64(SequenceID)]), " type :", typea)
+	// fmt.Println("Save Checkpoint Msg : ", node.CheckPointMsgsLog[int64(SequenceID)][node.MyInfo.NodeID], "// length : ", len(node.CheckPointMsgsLog[int64(SequenceID)]), " type :", typea)
 	if node.Checkpointchk(SequenceID) && node.States[SequenceID].CheckPointState == 0 {
 
 		node.States[SequenceID].CheckPointState = 1

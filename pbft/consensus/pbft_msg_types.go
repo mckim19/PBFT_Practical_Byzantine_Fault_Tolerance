@@ -30,8 +30,9 @@ type VoteMsg struct {
 	SequenceID int64  `json:"sequenceID"`
 	Digest     string `json:"digest"`
 	NodeID     string `json:"nodeID"`
-	MsgType    `json:"msgType"`
+	MsgType           `json:"msgType"`
 }
+
 type CheckPointMsg struct {
 	SequenceID int64  `json:"sequenceID"`
 	Digest     string `json:"digest"`
@@ -56,7 +57,6 @@ type NewViewMsg struct {
 }
 
 type MsgType int
-
 const (
 	PrepareMsg MsgType = iota
 	CommitMsg
