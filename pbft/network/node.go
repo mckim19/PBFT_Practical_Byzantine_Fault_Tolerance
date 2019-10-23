@@ -312,13 +312,6 @@ func (node *Node) StartViewChange() {
 	close(node.MsgEntrance)
 
 	//check state right after viewchange
-	fmt.Println("a set of SetP!!")
-	for v, _ := range node.States {
-		fmt.Println(" Sequence N : ", v)
-		fmt.Println("    === > Preprepare : ", node.States[v].MsgLogs.PreprepareMsgs)
-		fmt.Println("    === > Prepare : ", node.States[v].MsgLogs.PrepareMsgs)
-	}
-
 	fmt.Println("a set of SetP!!!")
 	for i:= int64(1); i <= int64(len(node.States)); i++ {
 		fmt.Println(" Sequence N : ", i)
