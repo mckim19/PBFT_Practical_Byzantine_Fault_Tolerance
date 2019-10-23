@@ -12,7 +12,7 @@ func LogMsg(msg interface{}) {
 		fmt.Printf("[REQUEST] ClientID: %s, Timestamp: %d, Operation: %s\n", reqMsg.ClientID, reqMsg.Timestamp, reqMsg.Operation)
 	case *consensus.PrePrepareMsg:
 		prePrepareMsg := msg.(*consensus.PrePrepareMsg)
-		fmt.Printf("[PREPREPARE] ClientID: %s, Operation: %s, SequenceID: %d\n", prePrepareMsg.RequestMsg.ClientID, prePrepareMsg.RequestMsg.Operation, prePrepareMsg.SequenceID)
+		fmt.Printf("[PREPREPARE] SequenceID: %d\n", prePrepareMsg.SequenceID)
 	case *consensus.VoteMsg:
 		voteMsg := msg.(*consensus.VoteMsg)
 		if voteMsg.MsgType == consensus.PrepareMsg {

@@ -74,7 +74,7 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	// when there are view changes some sequence numbers
 	// may be assigned to null requests whose execution is a no-op.
 
-	// Save ReqMsgs to its logs.
+	// Log REQUEST message.
 	state.MsgLogs.ReqMsg = request
 
 	// Get the digest of the request message
@@ -91,7 +91,6 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 		ViewID: state.ViewID,
 		SequenceID: request.SequenceID,
 		Digest: digest,
-		RequestMsg: request,
 	}
 
 	// Accessing to the message log without locking is safe because
@@ -103,16 +102,15 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 }
 
 func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
-	// Get ReqMsgs and save it to its logs like the primary.
-	state.MsgLogs.ReqMsg = prePrepareMsg.RequestMsg
+	// Log PREPREPARE message.
 	state.MsgLogs.PrePrepareMsg = prePrepareMsg
 
-	// Set sequence number same as PREPREPARE message.
+	// Set sequence number same as PREPREPARE message sent from Primary.
 	state.SequenceID = prePrepareMsg.SequenceID
 
 	// Verify if v, n(a.k.a. sequenceID), d are correct.
 	if err := state.verifyMsg(prePrepareMsg.ViewID, prePrepareMsg.SequenceID, prePrepareMsg.Digest); err != nil {
-		return nil, errors.New("pre-prepare message is corrupted: " + err.Error() + " (operation: " + prePrepareMsg.RequestMsg.Operation + ")")
+		return nil, errors.New("pre-prepare message is corrupted: " + err.Error() + " (sequenceID: " + string(prePrepareMsg.SequenceID) + ")")
 	}
 
 	// Change the stage to pre-prepared.
@@ -126,9 +124,9 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 		MsgType: PrepareMsg,
 	}
 
-	// Accessing to the message log without locking is safe,
-	// for the same reason as in StartConsensus().
+	state.MsgLogs.PrepareMsgsMutex.Lock()
 	state.MsgLogs.PrepareMsgs[state.NodeID] = prepareMsg
+	state.MsgLogs.PrepareMsgsMutex.Unlock()
 
 	return prepareMsg, nil
 }

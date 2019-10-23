@@ -136,7 +136,7 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 	node.StartViewChange()
 }
 
-// Consensus start procedure for the Primary.
+// When REQUEST message is broadcasted, start consensus.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogMsg(reqMsg)
 
@@ -160,21 +160,22 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
 	         node.View.ID, node.View.Primary.NodeID), false)
 
-	// Send getPrePrepare message
+	// Send PrePrepare message.
 	if prePrepareMsg != nil {
-		node.Broadcast(prePrepareMsg, "/preprepare")
-		LogStage("Pre-prepare", true)
+		LogStage("Request", true)
+		if node.isMyNodePrimary() {
+			node.Broadcast(prePrepareMsg, "/preprepare")
+		}
+		LogStage("Pre-prepare", false)
 	}
 
 	return nil
 }
 
-// Consensus start procedure for normal participants.
 func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	LogMsg(prePrepareMsg)
 
-	// Create a new state object.
-	state, err := node.createState(prePrepareMsg.RequestMsg.Timestamp)
+	state, err := node.getState(prePrepareMsg.SequenceID)
 	if err != nil {
 		return err
 	}
@@ -184,11 +185,6 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 	if err != nil {
 		return err
 	}
-
-	// Register state into node and update last sequence number.
-	node.StatesMutex.Lock()
-	node.States[prePrepareMsg.SequenceID] = state
-	node.StatesMutex.Unlock()
 
 	if prepareMsg != nil {
 		// Attach node ID to the message
@@ -205,12 +201,9 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
-	node.StatesMutex.RLock()
-	state := node.States[prepareMsg.SequenceID]
-	node.StatesMutex.RUnlock()
-
-	if state == nil {
-		return fmt.Errorf("[Prepare] State for sequence number %d has not created yet.", prepareMsg.SequenceID)
+	state, err := node.getState(prepareMsg.SequenceID)
+	if err != nil {
+		return err
 	}
 
 	commitMsg, err := node.prepare(state, prepareMsg)
@@ -233,12 +226,9 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	LogMsg(commitMsg)
 
-	node.StatesMutex.RLock()
-	state := node.States[commitMsg.SequenceID]
-	node.StatesMutex.RUnlock()
-
-	if state == nil {
-		return fmt.Errorf("[Commit] State for sequence number %d has not created yet.", commitMsg.SequenceID)
+	state, err := node.getState(commitMsg.SequenceID)
+	if err != nil {
+		return err
 	}
 
 	replyMsg, committedMsg, err := node.commit(state, commitMsg)
@@ -309,7 +299,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 
 	LogStage("ViewChange", true)
 
-	if newView != nil && node.View.Primary.NodeID == node.MyInfo.NodeID {
+	if newView != nil && node.isMyNodePrimary() {
 
 		LogStage("NewView", false)
 		node.NewView(newView)
@@ -346,13 +336,10 @@ func (node *Node) dispatchMsg() {
 func (node *Node) routeMsg(msgEntered interface{}) {
 	switch msg := msgEntered.(type) {
 	case *consensus.RequestMsg:
-		// Send request message only if the node is primary.
-		if node.MyInfo.NodeID == node.View.Primary.NodeID {
-			node.MsgDelivery <- msg
-		}
+		node.MsgDelivery <- msg
 	case *consensus.PrePrepareMsg:
 		// Send pre-prepare message only if the node is not primary.
-		if node.MyInfo.NodeID != node.View.Primary.NodeID {
+		if !node.isMyNodePrimary() {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.VoteMsg:
@@ -530,6 +517,18 @@ func (node *Node) logErrorMsg() {
 	}
 }
 
+func (node *Node) getState(sequenceID int64) (*consensus.State, error) {
+	node.StatesMutex.RLock()
+	state := node.States[sequenceID]
+	node.StatesMutex.RUnlock()
+
+	if state == nil {
+		return nil, fmt.Errorf("State for sequence number %d has not created yet.", sequenceID)
+	}
+
+	return state, nil
+}
+
 func (node *Node) startConsensus(state consensus.PBFT, reqMsg *consensus.RequestMsg) (*consensus.PrePrepareMsg, error) {
 	// Increment the number of consensus atomically in the current view.
 	// TODO: Currently, StartConsensus must succeed.
@@ -549,9 +548,6 @@ func (node *Node) prePrepare(state consensus.PBFT, prePrepareMsg *consensus.PreP
 		return nil, err
 	}
 
-	// Increment the number of consensus atomically in the current view.
-	atomic.AddInt64(&node.TotalConsensus, 1)
-
 	return prepareMsg, err
 }
 
@@ -565,6 +561,10 @@ func (node *Node) prepare(state consensus.PBFT, prepareMsg *consensus.VoteMsg) (
 // COMMIT messages from backup servers which consensus are slow.
 func (node *Node) commit(state consensus.PBFT, commitMsg *consensus.VoteMsg) (*consensus.ReplyMsg, *consensus.RequestMsg, error) {
 	return state.Commit(commitMsg)
+}
+
+func (node *Node) isMyNodePrimary() bool {
+	return node.MyInfo.NodeID == node.View.Primary.NodeID
 }
 
 func (node *Node) updateView(viewID int64) {
