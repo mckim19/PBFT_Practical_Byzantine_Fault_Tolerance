@@ -49,7 +49,7 @@ type ViewChangeMsg struct {
 
 type SetPm struct {
 	PreprepareMsg *PrePrepareMsg
-	PrePareMsgs   map[string]*VoteMsg
+	PrepareMsgs   map[string]*VoteMsg
 }
 
 
