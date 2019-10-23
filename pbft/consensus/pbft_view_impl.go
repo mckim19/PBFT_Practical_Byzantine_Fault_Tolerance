@@ -14,6 +14,7 @@ type ViewChangeState struct {
 	CurrentStage   ViewChangeStage
 	NodeID		   string
 	StableCheckPoint int64
+	//SetP   []*SetPm
 	// f: the number of Byzantine faulty nodes
 	// f = (n-1) / 3
 	// e.g., n = 5, f = 1
@@ -39,7 +40,7 @@ const (
 )
 
 
-func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stablecheckpoint int64) *ViewChangeState {
+func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stablecheckpoint int64, /*setpm SetP*/) *ViewChangeState {
 	return &ViewChangeState{
 		NextViewID: nextviewID,
 		ViewChangeMsgLogs: &ViewChangeMsgLogs{
@@ -50,21 +51,37 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 		CurrentStage: ViewIdle,
 		NodeID : nodeID,
 		StableCheckPoint: stablecheckpoint,
+		//SetP: setpm,
 
 		f: (totNodes - 1) / 3,
 	}
 }
 
 
-func (viewchangestate *ViewChangeState) CreateViewChangeMsg() (*ViewChangeMsg, error) {
+func (viewchangestate *ViewChangeState) CreateViewChangeMsg(/*states *States*/) (*ViewChangeMsg, error) {
 
 	viewchangestate.CurrentStage = ViewChanged
 
+	/*
+	var setp []*SetPm
+
+	for i := 0; i < len(states); i++ {
+		setp[i].PreprepareMsg = states[i].MsgLogs.PreprepareMsgs
+		setp[i].PrepareMsgs
+	}
+
+	for v, _ := range states {
+		fmt.Println(" Sequence N : ", v)
+		fmt.Println("    === > Preprepare : ", states[v].MsgLogs.PreprepareMsgs)
+		fmt.Println("    === > Prepare : ", states[v].MsgLogs.PrepareMsgs)
+	}*/
 
 	return &ViewChangeMsg{
 		NodeID: viewchangestate.NodeID,
 		NextViewID: viewchangestate.NextViewID,
 		StableCheckPoint: viewchangestate.StableCheckPoint,
+
+		//SetP: viewchangestes.SetP,
 	}, nil
 
 

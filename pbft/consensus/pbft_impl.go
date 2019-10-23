@@ -22,7 +22,7 @@ type State struct {
 
 type MsgLogs struct {
 	ReqMsg         *RequestMsg
-	PreprepareMsgs *PrePrepareMsg
+	PreprepareMsgs *PrePrepareMsg   //Msgs??
 	PrepareMsgs    map[string]*VoteMsg
 	CommitMsgs     map[string]*VoteMsg
 

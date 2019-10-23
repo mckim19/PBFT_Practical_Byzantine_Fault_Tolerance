@@ -43,9 +43,15 @@ type ViewChangeMsg struct {
 	NextViewID int64  `json:"nextviewID"`
 	StableCheckPoint int64 `json:"stableCheckPoint`
 	//C checkpointmsg_set 2f+1
-	//P a set of preprepare + (preparemsg * 2f+1) from stablecheckpoint to the biggest sequence_num that node received
-
+	//SetP -> a set of preprepare + (preparemsg * 2f+1) from stablecheckpoint to the biggest sequence_num that node received
+	SetP  []*SetPm	`json:"setP`
 }
+
+type SetPm struct {
+	PreprepareMsg *PrePrepareMsg
+	PrePareMsgs   map[string]*VoteMsg
+}
+
 
 type NewViewMsg struct {
 	NodeID     string `json:"nodeID"`

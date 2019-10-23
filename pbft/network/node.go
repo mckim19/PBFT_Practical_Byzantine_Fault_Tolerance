@@ -308,15 +308,32 @@ func (node *Node) StartViewChange() {
 	//Start_ViewChange
 	LogStage("ViewChange", false) //ViewChange_Start
 
+	//stop accepting Msgs  
 	close(node.MsgEntrance)
 
+	//check state right after viewchange
+	fmt.Println("a set of SetP!!")
+	for v, _ := range node.States {
+		fmt.Println(" Sequence N : ", v)
+		fmt.Println("    === > Preprepare : ", node.States[v].MsgLogs.PreprepareMsgs)
+		fmt.Println("    === > Prepare : ", node.States[v].MsgLogs.PrepareMsgs)
+	}
+
+	fmt.Println("a set of SetP!!!")
+	for i:= int64(1); i <= int64(len(node.States)); i++ {
+		fmt.Println(" Sequence N : ", i)
+		fmt.Println("    === > Preprepare : ", node.States[i].MsgLogs.PreprepareMsgs)
+		fmt.Println("    === > Prepare : ", node.States[i].MsgLogs.PrepareMsgs)
+	}
+
+	//Create nextviewid
 	var nextviewid =  node.View.ID + 1
 
 	//Create ViewChangeState
-	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
+	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint/*, ???*/)
 
 	//Create ViewChangeMsg
-	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg()
+	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg(/*node.States*/)
 	if err != nil {
 		node.MsgError <- []error{err}
 		return
@@ -526,7 +543,7 @@ func (node *Node) executeMsg() {
 
 
 			//for test if sequenceID == 23, start viewchange
-			if  lastSequenceID == 22 {
+			if  lastSequenceID == 12 {
 				//ViewChange for test
 				node.StartViewChange()
 			}
