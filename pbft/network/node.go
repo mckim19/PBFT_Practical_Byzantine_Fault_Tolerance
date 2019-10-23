@@ -310,11 +310,10 @@ func (node *Node) StartViewChange() {
 
 	close(node.MsgEntrance)
 
-	//Change View and Primary
-	node.updateView(node.View.ID + 1)
+	var nextviewid =  node.View.ID + 1
 
 	//Create ViewChangeState
-	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), node.View.ID, node.StableCheckPoint)
+	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg()
@@ -324,6 +323,7 @@ func (node *Node) StartViewChange() {
 	}
 
 	node.Broadcast(viewChangeMsg, "/viewchange")
+
 }
 
 func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
@@ -350,10 +350,17 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 
 	LogStage("ViewChange", true)
 
-	if newView != nil && node.View.Primary.NodeID == node.NodeID {
+	if newView != nil  {
 
-		LogStage("NewView", false)
-		node.NewView(newView)
+		//Change View and Primary
+		node.updateView(newView.NextViewID)
+
+		if node.View.Primary.NodeID == node.NodeID {
+			fmt.Println("newView")
+
+			LogStage("NewView", false)
+			node.NewView(newView)
+		}
 
 	}
 
@@ -361,6 +368,10 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 }
 
 func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
+
+	//Change View and Primary
+	node.updateView(msg.NextViewID)
+
 	fmt.Printf("<<<<<<<<NewView>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
 	return nil
 }
@@ -513,9 +524,13 @@ func (node *Node) executeMsg() {
 
 			LogStage("Reply", true)
 
-			//ViewChange for test
-			node.StartViewChange()
 
+			//for test if sequenceID == 23, start viewchange
+			if  lastSequenceID == 22 {
+				//ViewChange for test
+				node.StartViewChange()
+			}
+			
 			delete(pairs, lastSequenceID+1)
 		}
 

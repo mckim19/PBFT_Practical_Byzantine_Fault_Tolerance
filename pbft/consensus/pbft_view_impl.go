@@ -9,7 +9,7 @@ import(
 const one = 1
 
 type ViewChangeState struct {
-	ViewID         int64
+	NextViewID         int64
 	ViewChangeMsgLogs   *ViewChangeMsgLogs
 	CurrentStage   ViewChangeStage
 	NodeID		   string
@@ -39,9 +39,9 @@ const (
 )
 
 
-func CreateViewChangeState(nodeID string, totNodes int, viewID int64, stablecheckpoint int64) *ViewChangeState {
+func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stablecheckpoint int64) *ViewChangeState {
 	return &ViewChangeState{
-		ViewID: viewID,
+		NextViewID: nextviewID,
 		ViewChangeMsgLogs: &ViewChangeMsgLogs{
 			ViewChangeMsgs:make(map[string]*ViewChangeMsg),
 
@@ -63,7 +63,7 @@ func (viewchangestate *ViewChangeState) CreateViewChangeMsg() (*ViewChangeMsg, e
 
 	return &ViewChangeMsg{
 		NodeID: viewchangestate.NodeID,
-		NextViewID: ((viewchangestate.ViewID + 1) % int64(3*viewchangestate.f +1)),
+		NextViewID: viewchangestate.NextViewID,
 		StableCheckPoint: viewchangestate.StableCheckPoint,
 	}, nil
 
@@ -98,7 +98,7 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 
 		
 		return &NewViewMsg{
-			NextViewID: viewchangestate.ViewID,
+			NextViewID: viewchangestate.NextViewID,
 			NodeID : viewchangestate.NodeID,
 		}, nil
 		
