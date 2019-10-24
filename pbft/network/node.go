@@ -311,31 +311,21 @@ func (node *Node) StartViewChange() {
 	//stop accepting Msgs  
 	close(node.MsgEntrance)
 
-	//check state right after viewchange
-	/*
-	fmt.Println("a set of SetP!!!")
-	for i:= int64(1); i <= int64(len(node.States)); i++ {
-		fmt.Println(" Sequence N : ", i)
-		fmt.Println("    === > Preprepare : ", node.States[i].MsgLogs.PreprepareMsgs)
-		fmt.Println("    === > Prepare : ", node.States[i].MsgLogs.PrepareMsgs)
-	}
-	*/
-
 	//Create nextviewid
 	var nextviewid =  node.View.ID + 1
 
 	//Create ViewChangeState
 	node.ViewChangeState = consensus.CreateViewChangeState(node.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 
+	//a set of PreprepareMsg and PrepareMsgs for veiwchange
+	setp := make(map[int64]*consensus.SetPm)
 
-	var setp []*consensus.SetPm = make([]*consensus.SetPm , len(node.States))
-
-	fmt.Println("before error")
-	for i := int64(1); i <= int64(len(node.States)); i++ {
-		setp[i].PreprepareMsg = node.States[i].MsgLogs.PreprepareMsgs
-		setp[i].PrepareMsgs = node.States[i].MsgLogs.PrepareMsgs
+	for v, _ := range node.States {
+		var setPm consensus.SetPm
+		setPm.PreprepareMsg = node.States[v].MsgLogs.PreprepareMsgs
+		setPm.PrepareMsgs = node.States[v].MsgLogs.PrepareMsgs
+		setp[v] = &setPm
 	}
-	fmt.Println("after error")
 
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg(setp)

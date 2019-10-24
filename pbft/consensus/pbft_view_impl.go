@@ -57,7 +57,7 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 }
 
 
-func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp []*SetPm) (*ViewChangeMsg, error) {
+func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp map[int64]*SetPm) (*ViewChangeMsg, error) {
 
 	viewchangestate.CurrentStage = ViewChanged
 
@@ -79,10 +79,10 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	//TODO: verify viewchangeMsg
 
 	//check received viewchangeMsg SetP
-	fmt.Println("---------------a set of SetP!!!---------")
-	for i := int64(1); i <= int64(len(viewchangeMsg.SetP)); i++ {
-		fmt.Println("    === > Preprepare : ", viewchangeMsg.SetP[i].PreprepareMsg)
-		fmt.Println("    === > Prepare : ", viewchangeMsg.SetP[i].PrepareMsgs)
+	fmt.Println("**************a set of SetP!!!******************")
+	for v, _ := range viewchangeMsg.SetP {
+		fmt.Println("    === > Preprepare : ", viewchangeMsg.SetP[v].PreprepareMsg)
+		fmt.Println("    === > Prepare : ", viewchangeMsg.SetP[v].PrepareMsgs)
 	}
 
 	// Append msg to its logs
