@@ -11,7 +11,6 @@ const one = 1
 type ViewChangeState struct {
 	NextViewID         int64
 	ViewChangeMsgLogs   *ViewChangeMsgLogs
-	CurrentStage   ViewChangeStage
 	NodeID		   string
 	StableCheckPoint int64
 
@@ -32,14 +31,6 @@ type ViewChangeMsgLogs struct {
 
 
 
-type ViewChangeStage int
-const (
-	ViewIdle        ViewChangeStage = iota // Node is created successfully, but the consensus process is not started yet.
-	ViewChanged
-	NewViewed
-)
-
-
 func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stablecheckpoint int64) *ViewChangeState {
 	return &ViewChangeState{
 		NextViewID: nextviewID,
@@ -48,7 +39,6 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 
 			TotalViewChangeMsg: 0,
 		},
-		CurrentStage: ViewIdle,
 		NodeID : nodeID,
 		StableCheckPoint: stablecheckpoint,
 
@@ -58,8 +48,6 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 
 
 func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp map[int64]*SetPm) (*ViewChangeMsg, error) {
-
-	viewchangestate.CurrentStage = ViewChanged
 
 	return &ViewChangeMsg{
 		NodeID: viewchangestate.NodeID,
@@ -81,7 +69,7 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	//check received viewchangeMsg SetP
 	fmt.Println("**************a set of SetP!!!******************")
 	for v, _ := range viewchangeMsg.SetP {
-		fmt.Println("    === > Preprepare : ", viewchangeMsg.SetP[v].PreprepareMsg)
+		fmt.Println("    === > Preprepare : ", viewchangeMsg.SetP[v].PrePrepareMsg)
 		fmt.Println("    === > Prepare : ", viewchangeMsg.SetP[v].PrepareMsgs)
 	}
 
@@ -100,9 +88,6 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	}
 
 	if viewchangestate.viewchanged() {
-
-		viewchangestate.CurrentStage = NewViewed
-
 		
 		return &NewViewMsg{
 			NextViewID: viewchangestate.NextViewID,

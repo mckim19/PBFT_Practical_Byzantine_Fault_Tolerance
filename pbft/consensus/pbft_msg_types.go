@@ -1,6 +1,6 @@
 package consensus
 
-// Messages are SOSP style.
+// Messages are TOCS style.
 
 type RequestMsg struct {
 	Timestamp  int64  `json:"timestamp"`
@@ -12,7 +12,7 @@ type RequestMsg struct {
 
 type ReplyMsg struct {
 	ViewID    int64  `json:"viewID"`
-	Timestamp int64  `json:"timestamp"`
+	Timestamp int64  `json:"timestamp"` // same timestamp value as RequestMsg
 	ClientID  string `json:"clientID"`
 	NodeID    string `json:"nodeID"`
 	Result    string `json:"result"`
@@ -22,16 +22,16 @@ type PrePrepareMsg struct {
 	ViewID     int64       `json:"viewID"`
 	SequenceID int64       `json:"sequenceID"`
 	Digest     string      `json:"digest"`
-	RequestMsg *RequestMsg `json:"requestMsg"`
 }
 
 type VoteMsg struct {
 	ViewID     int64  `json:"viewID"`
 	SequenceID int64  `json:"sequenceID"`
-	Digest     string `json:"digest"`
+	Digest     string `json:"digest"` // COMMIT message does not have digest
 	NodeID     string `json:"nodeID"`
-	MsgType    `json:"msgType"`
+	MsgType           `json:"msgType"`
 }
+
 type CheckPointMsg struct {
 	SequenceID int64  `json:"sequenceID"`
 	Digest     string `json:"digest"`
@@ -48,7 +48,7 @@ type ViewChangeMsg struct {
 }
 
 type SetPm struct {
-	PreprepareMsg *PrePrepareMsg
+	PrePrepareMsg *PrePrepareMsg
 	PrepareMsgs   map[string]*VoteMsg
 }
 
@@ -62,7 +62,6 @@ type NewViewMsg struct {
 }
 
 type MsgType int
-
 const (
 	PrepareMsg MsgType = iota
 	CommitMsg
