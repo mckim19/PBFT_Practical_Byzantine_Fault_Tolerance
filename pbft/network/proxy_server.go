@@ -3,18 +3,20 @@
 package network
 
 import (
-	"github.com/gorilla/websocket"
 	"net/http"
 	"net/url"
 
-	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
+	"github.com/gorilla/websocket"
+
 	"encoding/json"
 	"log"
 	"time"
+
+	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
 type Server struct {
-	url string
+	url  string
 	node *Node
 }
 
@@ -264,7 +266,7 @@ func dummyMsg(dummySize int, operation string, clientID string, timestamp int64)
 	for i := range data {
 		data[i] = 'A'
 	}
-	data[dummySize - 1] = 0
+	data[dummySize-1] = 0
 
 	msg.Data = string(data)
 
