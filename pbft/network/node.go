@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-	"errors"
+	//"errors"
 	"sync"
 	"sync/atomic"
 )
@@ -193,6 +193,14 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 		LogStage("Pre-prepare", true)
 		node.Broadcast(prepareMsg, "/prepare")
 		LogStage("Prepare", false)
+
+		// Step next.
+		err = node.GetPrepare(prepareMsg)
+		if err != nil {
+			// Do not return error because this error is not
+			// for PREPREPARE message.
+			node.MsgError <- []error{err}
+		}
 	}
 
 	return nil
@@ -218,6 +226,14 @@ func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 		LogStage("Prepare", true)
 		node.Broadcast(commitMsg, "/commit")
 		LogStage("Commit", false)
+
+		// Step next.
+		err = node.GetCommit(commitMsg)
+		if err != nil {
+			// Do not return error because this error is not
+			// for PREPARE message.
+			node.MsgError <- []error{err}
+		}
 	}
 
 	return nil
@@ -237,13 +253,11 @@ func (node *Node) GetCommit(commitMsg *consensus.VoteMsg) error {
 	}
 
 	if replyMsg != nil {
-		if committedMsg == nil {
-			return errors.New("committed message is nil, even though the reply message is not nil")
-		}
-
 		// Attach node ID to the message
 		replyMsg.NodeID = node.MyInfo.NodeID
 
+		// Pass the incomplete reply message through MsgExecution
+		// channel to run its operation sequentially.
 		node.MsgExecution <- &MsgPair{replyMsg, committedMsg}
 	}
 
