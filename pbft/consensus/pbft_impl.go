@@ -13,6 +13,7 @@ type State struct {
 	MsgLogs         *MsgLogs
 	SequenceID      int64
 	CurrentStage    Stage
+	// CheckPoint Success: 0 = NO, 1 = YES
 	CheckPointState int
 
 	// f: the number of Byzantine faulty nodes
@@ -22,13 +23,13 @@ type State struct {
 }
 
 type MsgLogs struct {
-	ReqMsg         *RequestMsg
-	PrePrepareMsg  *PrePrepareMsg
-	PrepareMsgs    map[string]*VoteMsg
-	CommitMsgs     map[string]*VoteMsg
+	ReqMsg        *RequestMsg
+	PrePrepareMsg *PrePrepareMsg
+	PrepareMsgs   map[string]*VoteMsg
+	CommitMsgs    map[string]*VoteMsg
 
-	TotalPrepareMsg  int32 // atomic
-	TotalCommitMsg   int32 // atomic
+	TotalPrepareMsg int32 // atomic
+	TotalCommitMsg  int32 // atomic
 
 	PrepareMsgsMutex sync.Mutex
 	CommitMsgsMutex  sync.Mutex
@@ -40,10 +41,10 @@ func CreateState(viewID int64, nodeID string, totNodes int) *State {
 		ViewID: viewID,
 		NodeID: nodeID,
 		MsgLogs: &MsgLogs{
-			ReqMsg: nil,
+			ReqMsg:        nil,
 			PrePrepareMsg: nil,
-			PrepareMsgs: make(map[string]*VoteMsg),
-			CommitMsgs: make(map[string]*VoteMsg),
+			PrepareMsgs:   make(map[string]*VoteMsg),
+			CommitMsgs:    make(map[string]*VoteMsg),
 
 			// Setting these counters during consensus is unsafe
 			// because quorum condition check can be skipped.
@@ -51,11 +52,11 @@ func CreateState(viewID int64, nodeID string, totNodes int) *State {
 			// Count PRE-PREPARE message from primary node as one PREPARE message.
 			// Count COMMIT message created from the current node as one COMMIT message.
 			TotalPrepareMsg: 1,
-			TotalCommitMsg: 1,
+			TotalCommitMsg:  1,
 		},
 		CurrentStage: Idle,
 
-		F: (totNodes - 1) / 3,
+		F:               (totNodes - 1) / 3,
 		CheckPointState: 0,
 	}
 
@@ -88,9 +89,9 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 
 	// Create PREPREPARE message.
 	prePrepareMsg := &PrePrepareMsg{
-		ViewID: state.ViewID,
+		ViewID:     state.ViewID,
 		SequenceID: request.SequenceID,
-		Digest: digest,
+		Digest:     digest,
 	}
 
 	// Accessing to the message log without locking is safe because
@@ -118,10 +119,10 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 
 	// Create PREPARE message.
 	prepareMsg := &VoteMsg{
-		ViewID: state.ViewID,
+		ViewID:     state.ViewID,
 		SequenceID: prePrepareMsg.SequenceID,
-		Digest: prePrepareMsg.Digest,
-		MsgType: PrepareMsg,
+		Digest:     prePrepareMsg.Digest,
+		MsgType:    PrepareMsg,
 	}
 
 	state.MsgLogs.PrepareMsgsMutex.Lock()
@@ -140,7 +141,7 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 	state.MsgLogs.PrepareMsgsMutex.Lock()
 	if _, ok := state.MsgLogs.PrepareMsgs[prepareMsg.NodeID]; ok {
 		fmt.Printf("Prepare message from %s is already received, sequence number=%d\n",
-		           prepareMsg.NodeID, state.SequenceID)
+			prepareMsg.NodeID, state.SequenceID)
 		state.MsgLogs.PrepareMsgsMutex.Unlock()
 		return nil, nil
 	}
@@ -150,7 +151,7 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 
 	// Print current voting status
 	fmt.Printf("[Prepare-Vote]: %d, from %s, sequence number: %d\n",
-	           newTotalPrepareMsg, prepareMsg.NodeID, prepareMsg.SequenceID)
+		newTotalPrepareMsg, prepareMsg.NodeID, prepareMsg.SequenceID)
 
 	// Return nil if the state has already passed prepared stage.
 	if int(newTotalPrepareMsg) > 2*state.F {
@@ -164,10 +165,10 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 
 		// Create COMMIT message.
 		commitMsg := &VoteMsg{
-			ViewID: state.ViewID,
+			ViewID:     state.ViewID,
 			SequenceID: prepareMsg.SequenceID,
-			Digest: prepareMsg.Digest,
-			MsgType: CommitMsg,
+			Digest:     prepareMsg.Digest,
+			MsgType:    CommitMsg,
 		}
 
 		state.MsgLogs.CommitMsgsMutex.Lock()
@@ -194,7 +195,7 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	state.MsgLogs.CommitMsgsMutex.Lock()
 	if _, ok := state.MsgLogs.CommitMsgs[commitMsg.NodeID]; ok {
 		fmt.Printf("Commit message from %s is already received, sequence number=%d\n",
-		           commitMsg.NodeID, state.SequenceID)
+			commitMsg.NodeID, state.SequenceID)
 		state.MsgLogs.CommitMsgsMutex.Unlock()
 		return nil, nil, nil
 	}
@@ -204,22 +205,22 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 
 	// Print current voting status
 	fmt.Printf("[Commit-Vote]: %d, from %s, sequence number: %d\n",
-	           newTotalCommitMsg, commitMsg.NodeID, commitMsg.SequenceID)
+		newTotalCommitMsg, commitMsg.NodeID, commitMsg.SequenceID)
 	// Return nil if the state has already passed commited stage.
-	if int(newTotalCommitMsg) > 2*state.F + 1 {
+	if int(newTotalCommitMsg) > 2*state.F+1 {
 		return nil, nil, nil
 	}
 
 	// Return reply message only once.
-	if int(newTotalCommitMsg) == 2*state.F + 1 && state.committed() {
+	if int(newTotalCommitMsg) == 2*state.F+1 && state.committed() {
 		// Change the stage to committed.
 		state.CurrentStage = Committed
 		fmt.Printf("[Commit-Vote]: committed. sequence number: %d\n", state.SequenceID)
 
 		return &ReplyMsg{
-			ViewID: state.ViewID,
+			ViewID:    state.ViewID,
 			Timestamp: state.MsgLogs.ReqMsg.Timestamp,
-			ClientID: state.MsgLogs.ReqMsg.ClientID,
+			ClientID:  state.MsgLogs.ReqMsg.ClientID,
 			// Nodes must execute the requested operation
 			// locally and assign the result into reply message,
 			// with considering their operation ordering policy.
@@ -279,9 +280,10 @@ func (state *State) committed() bool {
 		return false
 	}
 
-	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.F + 1 {
+	if int(atomic.LoadInt32(&state.MsgLogs.TotalCommitMsg)) < 2*state.F+1 {
 		return false
 	}
 
 	return true
 }
+

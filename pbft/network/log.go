@@ -2,6 +2,7 @@ package network
 
 import (
 	"fmt"
+
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
@@ -20,6 +21,9 @@ func LogMsg(msg interface{}) {
 		} else if voteMsg.MsgType == consensus.CommitMsg {
 			fmt.Printf("[COMMIT] NodeID: %s\n", voteMsg.NodeID)
 		}
+	case *consensus.CheckPointMsg:
+		CheckPointMsg := msg.(*consensus.CheckPointMsg)
+		fmt.Printf("[CheckPointMsg] NodeID: %s\n", CheckPointMsg.NodeID)
 	case *consensus.ViewChangeMsg:
 		viewchangeMsg := msg.(*consensus.ViewChangeMsg)
 		fmt.Printf("[ViewChangeMsg] NodeID: %s\n", viewchangeMsg.NodeID)

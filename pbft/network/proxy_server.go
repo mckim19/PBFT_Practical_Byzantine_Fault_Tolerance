@@ -3,18 +3,20 @@
 package network
 
 import (
-	"github.com/gorilla/websocket"
 	"net/http"
 	"net/url"
 
-	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
+	"github.com/gorilla/websocket"
+
 	"encoding/json"
 	"log"
 	"time"
+
+	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
 type Server struct {
-	url string
+	url  string
 	node *Node
 }
 
@@ -187,7 +189,7 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 				log.Println(err)
 				continue
 			}
-			server.node.MsgEntrance <- &msg
+			server.node.ViewMsgEntrance <- &msg
 		case "/newview":
 			var msg consensus.NewViewMsg
 			err = json.Unmarshal(message, &msg)
@@ -195,7 +197,7 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 				log.Println(err)
 				continue
 			}
-			server.node.MsgEntrance <- &msg
+			server.node.ViewMsgEntrance <- &msg
 		}
 	}
 }
@@ -264,7 +266,7 @@ func dummyMsg(dummySize int, operation string, clientID string, timestamp int64)
 	for i := range data {
 		data[i] = 'A'
 	}
-	data[dummySize - 1] = 0
+	data[dummySize-1] = 0
 
 	msg.Data = string(data)
 
