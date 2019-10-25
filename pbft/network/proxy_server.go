@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"log"
 	"time"
-	"fmt"
 
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
@@ -133,81 +132,74 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 			return
 		}
 		//log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
-		fmt.Println("sfdfsdfdsfdsf")
-		//check whether MsgEntrance opened or closed
-		v, ok := <-server.node.MsgEntrance
-
-		fmt.Println(v,ok)
-
-		if ok || path == "/viewchange" || path == "newview"{
 		
-			switch path {
-			case "/req":
-				var msg consensus.RequestMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.MsgEntrance <- &msg
-			case "/preprepare":
-				var msg consensus.PrePrepareMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.MsgEntrance <- &msg
-			case "/prepare":
-				var msg consensus.VoteMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.MsgEntrance <- &msg
-			case "/commit":
-				var msg consensus.VoteMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.MsgEntrance <- &msg
-			case "/reply":
-				var msg consensus.ReplyMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.MsgEntrance <- &msg
-			case "/checkpoint":
-				var msg consensus.CheckPointMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.MsgEntrance <- &msg
-			case "/viewchange":
-				var msg consensus.ViewChangeMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.ViewMsgEntrance <- &msg
-			case "/newview":
-				var msg consensus.NewViewMsg
-				err = json.Unmarshal(message, &msg)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				server.node.ViewMsgEntrance <- &msg
+		switch path {
+		case "/req":
+			var msg consensus.RequestMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
 			}
+			server.node.MsgEntrance <- &msg
+		case "/preprepare":
+			var msg consensus.PrePrepareMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/prepare":
+			var msg consensus.VoteMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/commit":
+			var msg consensus.VoteMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/reply":
+			var msg consensus.ReplyMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/checkpoint":
+			var msg consensus.CheckPointMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.MsgEntrance <- &msg
+		case "/viewchange":
+			var msg consensus.ViewChangeMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.ViewMsgEntrance <- &msg
+		case "/newview":
+			var msg consensus.NewViewMsg
+			err = json.Unmarshal(message, &msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			server.node.ViewMsgEntrance <- &msg
 		}
+		
 	}
 }
 

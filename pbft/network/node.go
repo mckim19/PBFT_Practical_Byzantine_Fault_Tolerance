@@ -34,7 +34,7 @@ type Node struct {
 	// CheckpointMsg save
 	StableCheckPoint    int64
 	CheckPointSendPoint int64
-	CheckPointMsgsLog   map[int64]map[string]*consensus.CheckPointMsg
+	CheckPointMsgsLog   map[int64]map[string]*consensus.CheckPointMsg // key: sequenceID, value: map(key: nodeID, value: checkpointmsg)
 }
 
 type NodeInfo struct {
@@ -452,7 +452,7 @@ func (node *Node) executeMsg() {
 			// Find the last committed message.
 			msgTotalCnt := len(node.CommittedMsgs)
 			if msgTotalCnt > 0 {
-				lastCommittedMsg := node.CommittedMsgs[msgTotalCnt-1]
+				lastCommittedMsg := node.CommittedMsgs[msgTotalCnt - 1]
 				lastSequenceID = lastCommittedMsg.SequenceID
 			} else {
 				lastSequenceID = 0
@@ -460,7 +460,7 @@ func (node *Node) executeMsg() {
 
 			// Stop execution if the message for the
 			// current sequence is not ready to execute.
-			p := pairs[lastSequenceID+1]
+			p := pairs[lastSequenceID + 1]
 			if p == nil {
 				break
 			}
@@ -481,26 +481,27 @@ func (node *Node) executeMsg() {
 
 			LogStage("Reply", true)
 
+			/*
 			//for test if sequenceID == 12, start viewchange
 			if  lastSequenceID == 12 {
 				//ViewChange for test
 				node.StartViewChange()
 			}
+			*/
+			nCheckPoint := node.CheckPointSendPoint + periodCheckPoint
+			msgTotalCnt1 := len(node.CommittedMsgs)
+		
+			if node.CommittedMsgs[msgTotalCnt1 - 1].SequenceID ==  nCheckPoint{
+				node.CheckPointSendPoint = nCheckPoint
 
-			/*
-			if node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID == node.CheckPointSendPoint+periodCheckPoint {
-				node.CheckPointSendPoint = node.CheckPointSendPoint + periodCheckPoint
-
-				SequenceID := node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID
-				//node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Lock()
-				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.CommittedMsgs[len(node.CommittedMsgs)-1])
+				SequenceID := node.CommittedMsgs[len(node.CommittedMsgs) - 1].SequenceID
+				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.CommittedMsgs[msgTotalCnt1 - 1])
 				LogStage("CHECKPOINT", false)
 				node.Broadcast(checkPointMsg, "/checkpoint")
 				node.CheckPoint(checkPointMsg)
-				//node.States[node.CommittedMsgs[len(node.CommittedMsgs)-1].SequenceID].MsgLogs.CheckPointMutex.Unlock()
  
-			}
-			*/
+			}		
+		
 			delete(pairs, lastSequenceID + 1)
 
 		}
@@ -634,7 +635,8 @@ func (node *Node) Checkpointchk(SequenceID int64) bool {
 	if node.States[SequenceID] == nil {
 		return false
 	}
-	if len(node.CheckPointMsgsLog[int64(SequenceID)]) >= (2*node.States[SequenceID].F+1) && node.CheckPointMsgsLog[int64(SequenceID)][node.MyInfo.NodeID] != nil {
+	if len(node.CheckPointMsgsLog[SequenceID]) >= (2*node.States[SequenceID].F + 1) && 
+	   node.CheckPointMsgsLog[SequenceID][node.MyInfo.NodeID] != nil {
 
 		return true
 	}
@@ -676,6 +678,7 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 		node.CheckPointHistory(msg.SequenceID)
 	}
 }
+
 
 // Print CheckPoint History
 func (node *Node) CheckPointHistory(SequenceID int64) error {
