@@ -112,12 +112,6 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 	// Start message error logger
 	go node.logErrorMsg()
 
-	// TODO:
-	// From TOCS: The backups check the sequence numbers assigned by
-	// the primary and use timeouts to detect when it stops.
-	// They trigger view changes to select a new primary when it
-	// appears that the current one has failed.
-
 	return node
 }
 
@@ -156,14 +150,17 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
 	         node.View.ID, node.View.Primary.NodeID), false)
 
-	// Send PrePrepare message.
+	// Broadcast PrePrepare message.
 	LogStage("Request", true)
 	if node.isMyNodePrimary() {
 		node.Broadcast(prePrepareMsg, "/preprepare")
 	}
 	LogStage("Pre-prepare", false)
 
-	// Spawn a consensus work with deadline for the created state.
+	// From TOCS: The backups check the sequence numbers assigned by
+	// the primary and use timeouts to detect when it stops.
+	// They trigger view changes to select a new primary when it
+	// appears that the current one has failed.
 	go node.startTransitionWithDeadline(state, reqMsg.Timestamp)
 }
 
@@ -176,7 +173,8 @@ func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp in
 
 	// Check the time is skewed.
 	timeDiff := time.Until(d).Nanoseconds()
-	fmt.Printf("The deadline is %d ms. (Skewed %d ms)\n",
+	fmt.Printf("The deadline for sequenceID %d is %d ms. (Skewed %d ms)\n",
+	           state.GetSequenceID(),
 	           timeDiff / int64(time.Millisecond),
 	           (ConsensusDeadline.Nanoseconds() - timeDiff) / int64(time.Millisecond))
 
@@ -200,8 +198,15 @@ func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp in
 				}
 			}
 		case <-ctx.Done():
-			// TODO: check messages are committed.
-			fmt.Println(ctx.Err())
+			// Check the consensus of the current state precedes
+			// that of the last committed message in this node.
+			msgTotalCnt := len(node.CommittedMsgs)
+			lastCommittedMsg := node.CommittedMsgs[msgTotalCnt - 1]
+			if lastCommittedMsg.SequenceID < state.GetSequenceID() {
+				// Broadcast view change message.
+				node.MsgError <- []error{ctx.Err()}
+				node.StartViewChange()
+			}
 			return
 		}
 	}

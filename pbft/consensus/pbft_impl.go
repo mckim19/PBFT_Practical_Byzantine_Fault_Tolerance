@@ -215,6 +215,10 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 	return nil, nil, nil
 }
 
+func (state *State) GetSequenceID() int64 {
+	return state.SequenceID
+
+}
 func (state *State) GetMsgReceiveChannel() <-chan interface{} {
 	return state.MsgState
 }

@@ -7,6 +7,7 @@ type PBFT interface {
 	Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error)
 	//ViewChange(viewchangeMsg *ViewChangeMsg) (error , error)
 
+	GetSequenceID() int64
 	GetMsgReceiveChannel() <-chan interface{}
 	GetMsgSendChannel() chan<- interface{}
 }
