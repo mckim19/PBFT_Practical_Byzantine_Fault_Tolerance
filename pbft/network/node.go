@@ -139,19 +139,18 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	// Create a new state object.
 	state := node.createState(reqMsg.Timestamp)
 
-	// Fill sequence number into the state and make the state prepared.
-	prePrepareMsg, err := node.startConsensus(state, reqMsg)
-	if err != nil {
-		node.MsgError <- []error{err}
-	}
+	// Increment the number of request message atomically.
+	// TODO: Currently, StartConsensus must succeed.
+	newTotalConsensus := atomic.AddInt64(&node.TotalConsensus, 1)
+	prePrepareMsg, _ := state.StartConsensus(reqMsg, newTotalConsensus)
 
 	// Register state into node and update last sequence number.
 	node.StatesMutex.Lock()
 	node.States[prePrepareMsg.SequenceID] = state
 	node.StatesMutex.Unlock()
 
-	LogStage(fmt.Sprintf("Consensus Process (ViewID: %d, Primary: %s)",
-	         node.View.ID, node.View.Primary.NodeID), false)
+	fmt.Printf("Consensus Process (ViewID: %d, SequenceID: %d)\n",
+	           prePrepareMsg.ViewID, prePrepareMsg.SequenceID)
 
 	// Broadcast PrePrepare message.
 	LogStage("Request", true)
@@ -606,14 +605,6 @@ func (node *Node) getState(sequenceID int64) (consensus.PBFT, error) {
 	return state, nil
 }
 
-func (node *Node) startConsensus(state consensus.PBFT, reqMsg *consensus.RequestMsg) (*consensus.PrePrepareMsg, error) {
-	// Increment the number of consensus atomically in the current view.
-	// TODO: Currently, StartConsensus must succeed.
-	newTotalConsensus := atomic.AddInt64(&node.TotalConsensus, 1)
-
-	return state.StartConsensus(reqMsg, newTotalConsensus)
-}
-
 func (node *Node) isMyNodePrimary() bool {
 	return node.MyInfo.NodeID == node.View.Primary.NodeID
 }
@@ -689,8 +680,8 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 		// Node Update StableCheckPoint
 		node.StableCheckPoint = fStableCheckPoint
 		LogStage("CHECKPOINT", true)
-
 	}
+
 	// print CheckPoint & MsgLogs each for Sequence
 	if len(msgsLog) == len(node.NodeTable) {
 		node.CheckPointHistory(msg.SequenceID)
