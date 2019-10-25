@@ -1,0 +1,754 @@
+ViewID: 10000000000 Primary: Node1
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node2
+[Prepare-Vote]: 2, from Node2, sequence number: 1
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[PREPARE] NodeID: Node3
+[COMMIT] NodeID: Node3
+[Prepare-Vote]: 3, from Node3, sequence number: 1
+[PREPARE] NodeID: Node4
+[COMMIT] NodeID: Node4
+[Commit-Vote]: 2, from Node4, sequence number: 1
+[COMMIT] NodeID: Node2
+Result: Executed by Node2
+Result: Executed by Node3
+Result: Executed by Node4
+[Prepare-Vote]: 4, from Node4, sequence number: 1
+[Commit-Vote]: 3, from Node2, sequence number: 1
+[Commit-Vote]: committed. sequence number: 1
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+Result: Executed by Node1
+[Commit-Vote]: 4, from Node3, sequence number: 1
+***committedMsgs[1]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node4
+[Prepare-Vote]: 2, from Node4, sequence number: 2
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[COMMIT] NodeID: Node3
+[PREPARE] NodeID: Node3
+[COMMIT] NodeID: Node2
+[Commit-Vote]: 2, from Node2, sequence number: 2
+[Commit-Vote]: 3, from Node3, sequence number: 2
+[Commit-Vote]: committed. sequence number: 2
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+***committedMsgs[2]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[COMMIT] NodeID: Node4
+Result: Executed by Node4
+[PREPARE] NodeID: Node2
+Result: Executed by Node3
+Result: Executed by Node1
+[Commit-Vote]: 4, from Node4, sequence number: 2
+[Prepare-Vote]: 3, from Node2, sequence number: 2
+Result: Executed by Node2
+[Prepare-Vote]: 4, from Node3, sequence number: 2
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node4
+[Prepare-Vote]: 2, from Node4, sequence number: 3
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node2
+[PREPARE] NodeID: Node2
+[Commit-Vote]: 2, from Node3, sequence number: 3
+[Commit-Vote]: 3, from Node2, sequence number: 3
+[Commit-Vote]: committed. sequence number: 3
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+Result: Executed by Node2
+Result: Executed by Node1
+[COMMIT] NodeID: Node4
+[Prepare-Vote]: 3, from Node2, sequence number: 3
+[Commit-Vote]: 4, from Node4, sequence number: 3
+***committedMsgs[3]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[PREPARE] NodeID: Node3
+Result: Executed by Node3
+[Prepare-Vote]: 4, from Node3, sequence number: 3
+Result: Executed by Node4
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node3
+[Prepare-Vote]: 2, from Node3, sequence number: 4
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[PREPARE] NodeID: Node4
+[COMMIT] NodeID: Node4
+[COMMIT] NodeID: Node3
+[Prepare-Vote]: 3, from Node4, sequence number: 4
+[Commit-Vote]: 2, from Node3, sequence number: 4
+[PREPARE] NodeID: Node2
+[COMMIT] NodeID: Node2
+[Commit-Vote]: 3, from Node4, sequence number: 4
+[Commit-Vote]: committed. sequence number: 4
+[Prepare-Vote]: 4, from Node2, sequence number: 4
+[Commit-Vote]: 4, from Node2, sequence number: 4
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+Result: Executed by Node3
+Result: Executed by Node1
+Result: Executed by Node4
+Result: Executed by Node2
+***committedMsgs[4]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node4
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node3
+The stage is not prepared: sequenceID = 5
+100 error messages detected! cool down for 20 milliseconds
+[COMMIT] NodeID: Node3
+[PREPARE] NodeID: Node3
+[Prepare-Vote]: 2, from Node4, sequence number: 5
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+The stage is not prepared: sequenceID = 5
+The stage is not prepared: sequenceID = 5
+[COMMIT] NodeID: Node3
+[Prepare-Vote]: 3, from Node3, sequence number: 5
+[Commit-Vote]: 2, from Node3, sequence number: 5
+[COMMIT] NodeID: Node4
+[Commit-Vote]: 3, from Node4, sequence number: 5
+[Commit-Vote]: committed. sequence number: 5
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+Result: Executed by Node1
+Result: Executed by Node3
+Result: Executed by Node4
+[PREPARE] NodeID: Node2
+[COMMIT] NodeID: Node2
+Result: Executed by Node2
+***committedMsgs[5]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[Commit-Vote]: 4, from Node2, sequence number: 5
+[Prepare-Vote]: 4, from Node2, sequence number: 5
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node3
+[PREPARE] NodeID: Node4
+[Prepare-Vote]: 2, from Node3, sequence number: 6
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[Prepare-Vote]: 3, from Node4, sequence number: 6
+[COMMIT] NodeID: Node3
+[COMMIT] NodeID: Node4
+[Commit-Vote]: 2, from Node3, sequence number: 6
+[COMMIT] NodeID: Node2
+[PREPARE] NodeID: Node2
+[Commit-Vote]: 3, from Node4, sequence number: 6
+[Commit-Vote]: committed. sequence number: 6
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+[Commit-Vote]: 4, from Node2, sequence number: 6
+[Prepare-Vote]: 4, from Node2, sequence number: 6
+Result: Executed by Node4
+***committedMsgs[6]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+Result: Executed by Node2
+Result: Executed by Node3
+Result: Executed by Node1
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node3
+[Prepare-Vote]: 2, from Node3, sequence number: 7
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[PREPARE] NodeID: Node2
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node3
+[Prepare-Vote]: 3, from Node2, sequence number: 7
+[COMMIT] NodeID: Node4
+[Commit-Vote]: 2, from Node2, sequence number: 7
+[Commit-Vote]: 3, from Node3, sequence number: 7
+[Commit-Vote]: committed. sequence number: 7
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+[PREPARE] NodeID: Node4
+[Commit-Vote]: 4, from Node4, sequence number: 7
+Result: Executed by Node1
+***committedMsgs[7]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[Prepare-Vote]: 4, from Node4, sequence number: 7
+Result: Executed by Node2
+Result: Executed by Node4
+Result: Executed by Node3
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node3
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node2
+100 error messages detected! cool down for 20 milliseconds
+[Prepare-Vote]: 2, from Node3, sequence number: 8
+[STAGE-DONE] Prepare
+[PREPARE] NodeID: Node4
+[COMMIT] NodeID: Node4
+[Commit-Vote]: 2, from Node4, sequence number: 8
+[STAGE-BEGIN] Commit
+[COMMIT] NodeID: Node3
+[Commit-Vote]: 3, from Node3, sequence number: 8
+[Commit-Vote]: committed. sequence number: 8
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+***committedMsgs[8]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+Result: Executed by Node4
+Result: Executed by Node1
+The stage is not prepared: sequenceID = 8
+The stage is not prepared: sequenceID = 8
+[COMMIT] NodeID: Node2
+[Prepare-Vote]: 3, from Node4, sequence number: 8
+[PREPARE] NodeID: Node2
+Result: Executed by Node3
+[Commit-Vote]: 4, from Node2, sequence number: 8
+[Prepare-Vote]: 4, from Node2, sequence number: 8
+Result: Executed by Node2
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node2
+[PREPARE] NodeID: Node4
+[Prepare-Vote]: 2, from Node2, sequence number: 9
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[PREPARE] NodeID: Node3
+[Prepare-Vote]: 3, from Node4, sequence number: 9
+[COMMIT] NodeID: Node4
+[Prepare-Vote]: 4, from Node3, sequence number: 9
+[COMMIT] NodeID: Node2
+[COMMIT] NodeID: Node3
+[Commit-Vote]: 2, from Node4, sequence number: 9
+[Commit-Vote]: 3, from Node3, sequence number: 9
+[Commit-Vote]: committed. sequence number: 9
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+[Commit-Vote]: 4, from Node2, sequence number: 9
+Result: Executed by Node2
+Result: Executed by Node3
+Result: Executed by Node1
+Result: Executed by Node4
+***committedMsgs[9]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node4
+[PREPARE] NodeID: Node3
+[Prepare-Vote]: 2, from Node4, sequence number: 10
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[COMMIT] NodeID: Node3
+[Prepare-Vote]: 3, from Node3, sequence number: 10
+[Commit-Vote]: 2, from Node3, sequence number: 10
+[COMMIT] NodeID: Node4
+Result: Executed by Node4
+[Commit-Vote]: 3, from Node4, sequence number: 10
+[Commit-Vote]: committed. sequence number: 10
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+[PREPARE] NodeID: Node2
+[COMMIT] NodeID: Node2
+[Prepare-Vote]: 4, from Node2, sequence number: 10
+***committedMsgs[10]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[Commit-Vote]: 4, from Node2, sequence number: 10
+Result: Executed by Node1
+Result: Executed by Node3
+Result: Executed by Node2
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node2
+[PREPARE] NodeID: Node3
+[PREPARE] NodeID: Node4
+[COMMIT] NodeID: Node3
+[Prepare-Vote]: 2, from Node4, sequence number: 11
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[Prepare-Vote]: 3, from Node3, sequence number: 11
+[Commit-Vote]: 2, from Node3, sequence number: 11
+[Prepare-Vote]: 4, from Node2, sequence number: 11
+[COMMIT] NodeID: Node4
+[COMMIT] NodeID: Node2
+[Commit-Vote]: 3, from Node4, sequence number: 11
+[Commit-Vote]: committed. sequence number: 11
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+Result: Executed by Node1
+Result: Executed by Node4
+***committedMsgs[11]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+Result: Executed by Node3
+Result: Executed by Node2
+[Commit-Vote]: 4, from Node2, sequence number: 11
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node2
+[Prepare-Vote]: 2, from Node2, sequence number: 12
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[COMMIT] NodeID: Node4
+[COMMIT] NodeID: Node3
+[Commit-Vote]: 2, from Node4, sequence number: 12
+[Commit-Vote]: 3, from Node3, sequence number: 12
+[Commit-Vote]: committed. sequence number: 12
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+***committedMsgs[12]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***
+[PREPARE] NodeID: Node4
+Result: Executed by Node1
+[Prepare-Vote]: 3, from Node4, sequence number: 12
+Result: Executed by Node3
+Result: Executed by Node4
+[PREPARE] NodeID: Node3
+[COMMIT] NodeID: Node2
+[Prepare-Vote]: 4, from Node3, sequence number: 12
+[Commit-Vote]: 4, from Node2, sequence number: 12
+Result: Executed by Node2
+[REQUEST] ClientID: Client1, Timestamp: 1571902489131224946, Operation: Op1
+[STAGE-DONE] Create the replica status
+[STAGE-BEGIN] Consensus Process (ViewID: 10000000000, Primary: Node1)
+[STAGE-DONE] Request
+[STAGE-BEGIN] Pre-prepare
+[PREPARE] NodeID: Node2
+[PREPARE] NodeID: Node4
+[Prepare-Vote]: 2, from Node2, sequence number: 13
+[STAGE-DONE] Prepare
+[STAGE-BEGIN] Commit
+[Prepare-Vote]: 3, from Node4, sequence number: 13
+[COMMIT] NodeID: Node4
+[COMMIT] NodeID: Node2
+[Commit-Vote]: 2, from Node4, sequence number: 13
+[Commit-Vote]: 3, from Node2, sequence number: 13
+[Commit-Vote]: committed. sequence number: 13
+[STAGE-DONE] Commit
+[STAGE-DONE] Reply
+[STAGE-BEGIN] ViewChange
+close Entrance
+CreateViewChangeState
+Create Setp
+CreateViewChangeMsg
+Breadcast viewchange
+***committedMsgs[13]: clientID=Client1, operation=Op1, timestamp=1571902489131224946, data(digest)=3ddec3ebef8a2fa378efd8ab73e38ed56fe0ad768505048ab4de8e1c50fbc3b4***

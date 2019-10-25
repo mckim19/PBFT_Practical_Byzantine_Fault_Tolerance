@@ -269,13 +269,13 @@ func (node *Node) StartViewChange() {
 
 	//stop accepting Msgs  
 	close(node.MsgEntrance)
-
+	fmt.Println("close Entrance")
 	//Create nextviewid
 	var nextviewid =  node.View.ID + 1
 
 	//Create ViewChangeState
 	node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
-
+	fmt.Println("CreateViewChangeState")
 	//a set of PreprepareMsg and PrepareMsgs for veiwchange
 	setp := make(map[int64]*consensus.SetPm)
 	
@@ -285,16 +285,17 @@ func (node *Node) StartViewChange() {
 		setPm.PrepareMsgs = node.States[v].MsgLogs.PrepareMsgs
 		setp[v] = &setPm
 	}
-
+	fmt.Println("Create Setp")
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg(setp)
+	fmt.Println("CreateViewChangeMsg")
 	if err != nil {
 		node.MsgError <- []error{err}
 		return
 	}
 
 	node.Broadcast(viewChangeMsg, "/viewchange")
-
+	fmt.Println("Breadcast viewchange")
 }
 
 func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
