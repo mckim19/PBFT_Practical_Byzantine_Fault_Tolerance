@@ -6,4 +6,7 @@ type PBFT interface {
 	Prepare(prepareMsg *VoteMsg) (*VoteMsg, error)
 	Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error)
 	//ViewChange(viewchangeMsg *ViewChangeMsg) (error , error)
+
+	GetMsgReceiveChannel() <-chan interface{}
+	GetMsgSendChannel() chan<- interface{}
 }
