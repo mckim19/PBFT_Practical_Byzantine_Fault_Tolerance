@@ -12,7 +12,6 @@ type State struct {
 	NodeID          string
 	MsgLogs         *MsgLogs
 	SequenceID      int64
-	CheckPointState int // 0: failed, 1: succeeded
 
 	MsgState chan interface{}
 
@@ -28,9 +27,8 @@ type MsgLogs struct {
 	PrepareMsgs   map[string]*VoteMsg
 	CommitMsgs    map[string]*VoteMsg
 
-	PrepareMsgsMutex sync.Mutex
-	CommitMsgsMutex  sync.Mutex
-	CheckPointMutex  sync.Mutex
+	PrepareMsgsMutex sync.RWMutex
+	CommitMsgsMutex  sync.RWMutex
 
 	// Count PREPARE message created from the current node
 	// as one PREPARE message. PRE-PREPARE message from
@@ -68,7 +66,6 @@ func CreateState(viewID int64, nodeID string, totNodes int) *State {
 		MsgState: make(chan interface{}, totNodes), // stack enough
 
 		F: (totNodes - 1) / 3,
-		CheckPointState: 0,
 	}
 
 	return state
@@ -219,12 +216,49 @@ func (state *State) GetSequenceID() int64 {
 	return state.SequenceID
 
 }
+
+func (state *State) GetF() int {
+	return state.F
+}
+
 func (state *State) GetMsgReceiveChannel() <-chan interface{} {
 	return state.MsgState
 }
 
 func (state *State) GetMsgSendChannel() chan<- interface{} {
 	return state.MsgState
+}
+
+func (state *State) GetReqMsg() *RequestMsg {
+	return state.MsgLogs.ReqMsg
+}
+
+func (state *State) GetPrePrepareMsg() *PrePrepareMsg {
+	return state.MsgLogs.PrePrepareMsg
+}
+
+func (state *State) GetPrepareMsgs() map[string]*VoteMsg {
+	newMap := make(map[string]*VoteMsg)
+
+	state.MsgLogs.PrepareMsgsMutex.RLock()
+	for k, v := range state.MsgLogs.PrepareMsgs {
+		newMap[k] = v
+	}
+	state.MsgLogs.PrepareMsgsMutex.RUnlock()
+
+	return newMap
+}
+
+func (state *State) GetCommitMsgs() map[string]*VoteMsg {
+	newMap := make(map[string]*VoteMsg)
+
+	state.MsgLogs.CommitMsgsMutex.RLock()
+	for k, v := range state.MsgLogs.CommitMsgs {
+		newMap[k] = v
+	}
+	state.MsgLogs.CommitMsgsMutex.RUnlock()
+
+	return newMap
 }
 
 func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) error {

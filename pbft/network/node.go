@@ -15,7 +15,7 @@ type Node struct {
 	MyInfo          *NodeInfo
 	NodeTable       []*NodeInfo
 	View            *View
-	States          map[int64]*consensus.State // key: sequenceID, value: state
+	States          map[int64]consensus.PBFT // key: sequenceID, value: state
 	ViewChangeState *consensus.ViewChangeState
 	CommittedMsgs   []*consensus.RequestMsg // kinda block.
 	TotalConsensus  int64 // atomic. number of consensus started so far.
@@ -79,7 +79,7 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 		View:      &View{},
 
 		// Consensus-related struct
-		States:          make(map[int64]*consensus.State),
+		States:          make(map[int64]consensus.PBFT),
 		CommittedMsgs:   make([]*consensus.RequestMsg, 0),
 		ViewChangeState: nil,
 
@@ -294,7 +294,6 @@ func (node *Node) GetReply(msg *consensus.ReplyMsg) {
 }
 
 func (node *Node) StartViewChange() {
-
 	//Start_ViewChange
 	LogStage("ViewChange", false) //ViewChange_Start
 
@@ -310,12 +309,15 @@ func (node *Node) StartViewChange() {
 	//a set of PreprepareMsg and PrepareMsgs for veiwchange
 	setp := make(map[int64]*consensus.SetPm)
 
-	for v, _ := range node.States {
+	node.StatesMutex.RLock()
+	for seqID, state := range node.States {
 		var setPm consensus.SetPm
-		setPm.PrePrepareMsg = node.States[v].MsgLogs.PrePrepareMsg
-		setPm.PrepareMsgs = node.States[v].MsgLogs.PrepareMsgs
-		setp[v] = &setPm
+		setPm.PrePrepareMsg = state.GetPrePrepareMsg()
+		setPm.PrepareMsgs = state.GetPrepareMsgs()
+		setp[seqID] = &setPm
 	}
+	node.StatesMutex.RUnlock()
+
 	fmt.Println("Create Setp")
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg(setp)
@@ -376,7 +378,7 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 	return nil
 }
 
-func (node *Node) createState(timeStamp int64) *consensus.State {
+func (node *Node) createState(timeStamp int64) consensus.PBFT {
 	// TODO: From TOCS: To guarantee exactly once semantics,
 	// replicas discard requests whose timestamp is lower than
 	// the timestamp in the last reply they sent to the client.
@@ -424,7 +426,7 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 
 func (node *Node) resolveMsg() {
 	for {
-		var state *consensus.State
+		var state consensus.PBFT
 		var err error = nil
 		msgDelivered := <-node.MsgDelivery
 
@@ -592,7 +594,7 @@ func (node *Node) logErrorMsg() {
 	}
 }
 
-func (node *Node) getState(sequenceID int64) (*consensus.State, error) {
+func (node *Node) getState(sequenceID int64) (consensus.PBFT, error) {
 	node.StatesMutex.RLock()
 	state := node.States[sequenceID]
 	node.StatesMutex.RUnlock()
@@ -636,30 +638,38 @@ func (node *Node) getCheckPointMsg(SequenceID int64, nodeID string, ReqMsgs *con
 		NodeID:     nodeID,
 	}, nil
 }
-func (node *Node) Checkpointchk(SequenceID int64) bool {
-	if node.States[SequenceID] == nil {
+func (node *Node) Checkpointchk(sequenceID int64) bool {
+	state, _ := node.getState(sequenceID)
+	if state == nil {
 		return false
 	}
-	if len(node.CheckPointMsgsLog[SequenceID]) >= (2*node.States[SequenceID].F + 1) &&
-	   node.CheckPointMsgsLog[SequenceID][node.MyInfo.NodeID] != nil {
 
+	if len(node.CheckPointMsgsLog[sequenceID]) >= (2*state.GetF() + 1) &&
+	   node.CheckPointMsgsLog[sequenceID][node.MyInfo.NodeID] != nil {
 		return true
 	}
 
 	return false
 }
 func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
-
-	if node.CheckPointMsgsLog[msg.SequenceID] == nil {
-		node.CheckPointMsgsLog[msg.SequenceID] = make(map[string]*consensus.CheckPointMsg)
+	// Test and test-and-set scheme.
+	msgsLog, ok := node.CheckPointMsgsLog[msg.SequenceID]
+	if !ok {
+		// TODO: do not use state lock.
+		node.StatesMutex.Lock()
+		msgsLog, ok = node.CheckPointMsgsLog[msg.SequenceID]
+		if !ok {
+			msgsLog = make(map[string]*consensus.CheckPointMsg)
+			node.CheckPointMsgsLog[msg.SequenceID] = msgsLog
+		}
+		node.StatesMutex.Unlock()
 	}
-	// Save CheckPoint each for Sequence and NodeID
-	node.CheckPointMsgsLog[msg.SequenceID][msg.NodeID] = msg
 
-	if node.Checkpointchk(msg.SequenceID) && node.States[msg.SequenceID].CheckPointState == 0 {
-		// CheckPoint Success(1 = Y)
-		node.States[msg.SequenceID].CheckPointState = 1
+	// Save CheckPoint each for Sequence and NodeID.
+	msgsLog[msg.NodeID] = msg
 
+	// Checkpoint only once for each sequence number.
+	if node.Checkpointchk(msg.SequenceID) && !ok {
 		fStableCheckPoint := node.StableCheckPoint + periodCheckPoint
 		// Delete Checkpoint Message Logs
 		for v, _ := range node.CheckPointMsgsLog {
@@ -668,26 +678,27 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 			}
 		}
 		// Delete State Message Logs
+		node.StatesMutex.Lock()
 		for v, _ := range node.States {
 			if int64(v) < fStableCheckPoint {
 				delete(node.States, v)
 			}
 		}
+		node.StatesMutex.Unlock()
+
 		// Node Update StableCheckPoint
 		node.StableCheckPoint = fStableCheckPoint
 		LogStage("CHECKPOINT", true)
 
 	}
 	// print CheckPoint & MsgLogs each for Sequence
-	if len(node.CheckPointMsgsLog[msg.SequenceID]) == len(node.NodeTable) {
+	if len(msgsLog) == len(node.NodeTable) {
 		node.CheckPointHistory(msg.SequenceID)
 	}
 }
 
-
 // Print CheckPoint History
 func (node *Node) CheckPointHistory(SequenceID int64) error {
-
 	fmt.Println("CheckPoint History!! ")
 
 	for v, _ := range node.CheckPointMsgsLog {
@@ -700,18 +711,16 @@ func (node *Node) CheckPointHistory(SequenceID int64) error {
 	}
 	fmt.Println("MsgLogs History!!")
 
-	for v, _ := range node.States {
-		state, err := node.getState(v)
-		if err != nil {
-			return err
-		}
-		digest, _ := consensus.Digest(node.States[v].MsgLogs.ReqMsg)
-		fmt.Println(" Sequence N : ", v)
+	node.StatesMutex.RLock()
+	for seqID, state := range node.States {
+		digest, _ := consensus.Digest(state.GetReqMsg())
+		fmt.Println(" Sequence N : ", seqID)
 		fmt.Println("    === > ReqMsgs : ", digest)
-		fmt.Println("    === > Preprepare : ", state.MsgLogs.PrePrepareMsg)
-		fmt.Println("    === > Prepare : ", state.MsgLogs.PrepareMsgs)
-		fmt.Println("    === > Commit : ", state.MsgLogs.CommitMsgs)
+		fmt.Println("    === > Preprepare : ", state.GetPrePrepareMsg())
+		fmt.Println("    === > Prepare : ", state.GetPrepareMsgs())
+		fmt.Println("    === > Commit : ", state.GetCommitMsgs())
 	}
+	node.StatesMutex.RUnlock()
 
 	return nil
 }
