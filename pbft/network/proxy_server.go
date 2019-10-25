@@ -3,16 +3,14 @@
 package network
 
 import (
+	"github.com/gorilla/websocket"
 	"net/http"
 	"net/url"
 
-	"github.com/gorilla/websocket"
-
+	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"encoding/json"
 	"log"
 	"time"
-
-	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
 type Server struct {
@@ -132,7 +130,7 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 			return
 		}
 		//log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
-		
+
 		switch path {
 		case "/req":
 			var msg consensus.RequestMsg
@@ -199,7 +197,6 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 			}
 			server.node.ViewMsgEntrance <- &msg
 		}
-		
 	}
 }
 
@@ -212,11 +209,15 @@ func (server *Server) sendDummyMsg() {
 	}
 
 	// Set periodic send signal.
-	ticker := time.NewTicker(time.Millisecond * 400)
+	ticker := time.NewTicker(time.Millisecond * 500)
 	defer ticker.Stop()
 
-	// Create a dummy message.
-	dummy := dummyMsg((1 << 20), "Op1", "Client1", time.Now().UnixNano())
+	// Create a dummy data.
+	data := make([]byte, 1 << 20)
+	for i := range data {
+		data[i] = 'A'
+	}
+	data[len(data) - 1] = 0
 
 	u := url.URL{Scheme: "ws", Host: primaryNode.Url, Path: "/req"}
 	log.Printf("connecting to %s", u.String())
@@ -229,6 +230,8 @@ func (server *Server) sendDummyMsg() {
 				log.Fatal("dial:", err)
 			}
 
+			// Create a dummy message and send it.
+			dummy := dummyMsg("Op1", "Client1", data)
 			err = c.WriteMessage(websocket.TextMessage, dummy)
 			if err != nil {
 				log.Println("write:", err)
@@ -257,18 +260,11 @@ func broadcast(errCh chan<- error, url string, msg []byte) {
 	errCh <- nil
 }
 
-func dummyMsg(dummySize int, operation string, clientID string, timestamp int64) []byte {
+func dummyMsg(operation string, clientID string, data []byte) []byte {
 	var msg consensus.RequestMsg
+	msg.Timestamp = time.Now().UnixNano()
 	msg.Operation = operation
 	msg.ClientID = clientID
-	msg.Timestamp = timestamp
-
-	data := make([]byte, dummySize)
-	for i := range data {
-		data[i] = 'A'
-	}
-	data[dummySize-1] = 0
-
 	msg.Data = string(data)
 
 	// {"operation": "Op1", "clientID": "Client1", "data": "JJWEJPQOWJE", "timestamp": 190283901}

@@ -2,7 +2,6 @@ package network
 
 import (
 	"fmt"
-
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
