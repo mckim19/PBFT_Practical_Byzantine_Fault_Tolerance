@@ -59,6 +59,9 @@ type MsgOut struct {
 
 const periodCheckPoint = 5
 
+// Deadline for the consensus state.
+const ConsensusDeadline = time.Millisecond * 1000
+
 // Cooling time to escape frequent error, or message sending retry.
 const CoolingTime = time.Millisecond * 20
 
@@ -161,12 +164,21 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	LogStage("Pre-prepare", false)
 
 	// Spawn a consensus work with deadline for the created state.
-	go node.startTransitionWithDeadline(state)
+	go node.startTransitionWithDeadline(state, reqMsg.Timestamp)
 }
 
-func (node *Node) startTransitionWithDeadline(state consensus.PBFT) {
-	d := time.Now().Add(time.Millisecond * 500)
+func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp int64) {
+	// Set deadline based on timestamp when the request message was created.
+	sec := timeStamp / int64(time.Second)
+	nsec := timeStamp % int64(time.Second)
+	d := time.Unix(sec, nsec).Add(ConsensusDeadline)
 	ctx, cancel := context.WithDeadline(context.Background(), d)
+
+	// Check the time is skewed.
+	timeDiff := time.Until(d).Nanoseconds()
+	fmt.Printf("The deadline is %d ms. (Skewed %d ms)\n",
+	           timeDiff / int64(time.Millisecond),
+	           (ConsensusDeadline.Nanoseconds() - timeDiff) / int64(time.Millisecond))
 
 	defer cancel()
 
