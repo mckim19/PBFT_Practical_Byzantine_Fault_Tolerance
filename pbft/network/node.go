@@ -59,7 +59,7 @@ type MsgOut struct {
 }
 
 // Deadline for the consensus state.
-const ConsensusDeadline = time.Millisecond * 1000
+const ConsensusDeadline = time.Millisecond * 200
 
 // Cooling time to escape frequent error, or message sending retry.
 const CoolingTime = time.Millisecond * 20
@@ -299,7 +299,6 @@ func (node *Node) dispatchMsg() {
 		case msg := <-node.MsgEntrance:
 			node.routeMsg(msg)
 		case viewmsg := <-node.ViewMsgEntrance:
-			fmt.Println("dispatchMsg()")
 			node.routeMsg(viewmsg)
 		}
 	}
@@ -437,7 +436,7 @@ func (node *Node) executeMsg() {
 				node.CheckPoint(checkPointMsg)
 			}
 			
-			
+
 			delete(pairs, lastSequenceID + 1)
 		}
 

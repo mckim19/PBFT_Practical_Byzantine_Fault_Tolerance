@@ -87,15 +87,16 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	fmt.Printf("[<<<<<<<<ViewChange-Vote>>>>>>>>>>]: %d\n", newTotalViewchangeMsg)
 
 
-	if int(newTotalViewchangeMsg) > 2*viewchangestate.f {
-		return nil, nil
-	}
+	if int(newTotalViewchangeMsg) >= 2*viewchangestate.f+1 && viewchangestate.viewchanged() {
+			
+		//setviewchangemsgs := make(map[string]*ViewChangeMsg)
 
-	if viewchangestate.viewchanged() {
-		
+		//setviewchangemsgs = viewchangestate.GetViewChangeMsgs()
+
 		return &NewViewMsg{
 			NextViewID: viewchangestate.NextViewID,
-			NodeID : viewchangestate.NodeID,
+			NodeID: viewchangestate.NodeID,
+			SetViewChangeMsgs: viewchangestate.GetViewChangeMsgs(),
 		}, nil
 		
 	}
@@ -105,9 +106,22 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 
 
 func (viewchangestate *ViewChangeState) viewchanged() bool {
-	if len(viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs) < 2*viewchangestate.f {
+	if int(atomic.LoadInt32(&viewchangestate.ViewChangeMsgLogs.TotalViewChangeMsg)) < 2*viewchangestate.f +1{
 		return false
 	}
 
 	return true
 }
+
+func (viewchangestate *ViewChangeState) GetViewChangeMsgs() map[string]*ViewChangeMsg {
+	newMap := make(map[string]*ViewChangeMsg)
+
+	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgMutex.Lock()
+	for k, v := range viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs {
+		newMap[k] = v
+	}
+	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgMutex.Unlock()
+
+	return newMap
+}
+

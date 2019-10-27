@@ -11,13 +11,13 @@ func (node *Node) StartViewChange() {
 
 	//stop accepting Msgs  
 	//close(node.MsgEntrance)
-	fmt.Println("close Entrance")
+	//fmt.Println("close Entrance")
 	//Create nextviewid
 	var nextviewid =  node.View.ID + 1
 
 	//Create ViewChangeState
 	node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
-	fmt.Println("CreateViewChangeState")
+
 	//a set of PreprepareMsg and PrepareMsgs for veiwchange
 	setp := make(map[int64]*consensus.SetPm)
 	setc := make(map[string]*consensus.CheckPointMsg)
@@ -38,7 +38,6 @@ func (node *Node) StartViewChange() {
 
 	node.StatesMutex.RUnlock()
 
-	fmt.Println("Create Setp")
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg(setp, setc)
 
@@ -52,7 +51,7 @@ func (node *Node) StartViewChange() {
 	fmt.Println("Breadcast viewchange")
 	LogStage("ViewChange", true)
 
-	node.GetViewChange(viewChangeMsg)
+	//node.GetViewChange(viewChangeMsg) ???????
 }
 
 func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
@@ -61,6 +60,8 @@ func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
 	node.Broadcast(newviewMsg, "/newview")
 	LogStage("NewView", true)
 
+	node.ViewChangeState = nil
+	
 	return nil
 }
 
@@ -78,10 +79,14 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	}
 
 
-
 	if newView != nil && node.isMyNodePrimary() {
 		//Change View and Primary
 		node.updateView(newView.NextViewID)
+
+		fmt.Println("**************N E W V I E W******************")
+		for nv, _ := range newView.SetViewChangeMsgs {
+		fmt.Println("    === > newView.SetViewChangeMsgs : ", newView.SetViewChangeMsgs[nv])
+		}
 
 		fmt.Println("newView")
 
