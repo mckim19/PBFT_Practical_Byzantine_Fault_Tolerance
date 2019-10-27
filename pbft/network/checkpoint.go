@@ -57,9 +57,12 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 
 	// Save CheckPoint each for Sequence and NodeID.
 	msgsLog[msg.NodeID] = msg
-
+	// get seuqenceID State
+	state, _ := node.getState(msg.SequenceID)
 	// Checkpoint only once for each sequence number.
-	if node.Checkpointchk(msg.SequenceID) && !ok {
+	
+	if node.Checkpointchk(msg.SequenceID) && state.GetSuccChkPoint() != 1 {
+		
 		fStableCheckPoint := node.StableCheckPoint + periodCheckPoint
 		// Delete Checkpoint Message Logs
 		for v, _ := range node.CheckPointMsgsLog {
@@ -75,7 +78,8 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 			}
 		}
 		node.StatesMutex.Unlock()
-
+		// if CheckPontMsg success, succChkPointDelete = 1 
+		state.SetSuccChkPoint(1)
 		// Node Update StableCheckPoint
 		node.StableCheckPoint = fStableCheckPoint
 		LogStage("CHECKPOINT", true)
@@ -113,4 +117,20 @@ func (node *Node) CheckPointHistory(SequenceID int64) error {
 	node.StatesMutex.RUnlock()
 
 	return nil
+}
+// each for sequence ID, commitMsgs Check
+func (node *Node) CheckPointMissCheck(sequenceID int64) bool {
+	
+	node.StatesMutex.RLock()
+	for i := (sequenceID + 1); i <= (sequenceID + periodCheckPoint); i++ {
+		state := node.States[i]
+		
+		if state.GetCommitMsgs()[node.MyInfo.NodeID] == nil && len(state.GetCommitMsgs()) < 2 * state.GetF() + 1 {
+
+			return false
+		}
+		
+	}
+	node.StatesMutex.RUnlock()
+	return true
 }

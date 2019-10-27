@@ -429,11 +429,21 @@ func (node *Node) executeMsg() {
 			if node.CommittedMsgs[msgTotalCnt1 - 1].SequenceID ==  nCheckPoint{
 				node.CheckPointSendPoint = nCheckPoint
 
-				SequenceID := node.CommittedMsgs[len(node.CommittedMsgs) - 1].SequenceID
-				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.CommittedMsgs[msgTotalCnt1 - 1])
 				LogStage("CHECKPOINT", false)
-				node.Broadcast(checkPointMsg, "/checkpoint")
-				node.CheckPoint(checkPointMsg)
+				// Miss CheckPointMsg Check. 
+				for sequenceid := node.StableCheckPoint; sequenceid < nCheckPoint; {
+					chkSequenceid := int64(sequenceid + periodCheckPoint)
+					ok := node.CheckPointMissCheck(sequenceid)
+					if ok {
+						SequenceID := node.States[chkSequenceid].GetReqMsg().SequenceID
+						checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.States[chkSequenceid].GetReqMsg())						
+						node.Broadcast(checkPointMsg, "/checkpoint")
+						node.CheckPoint(checkPointMsg)
+					}
+					
+					sequenceid += periodCheckPoint
+				}
+			
 			}
 
 			delete(pairs, lastSequenceID + 1)
