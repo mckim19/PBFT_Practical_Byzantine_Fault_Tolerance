@@ -422,6 +422,7 @@ func (node *Node) executeMsg() {
 			node.Reply(p.replyMsg)
 
 			LogStage("Reply", true)
+			
 
 			nCheckPoint := node.CheckPointSendPoint + periodCheckPoint
 			msgTotalCnt1 := len(node.CommittedMsgs)
@@ -435,7 +436,8 @@ func (node *Node) executeMsg() {
 				node.Broadcast(checkPointMsg, "/checkpoint")
 				node.CheckPoint(checkPointMsg)
 			}
-
+			
+			
 			delete(pairs, lastSequenceID + 1)
 		}
 
