@@ -42,9 +42,8 @@ type ViewChangeMsg struct {
 	NodeID     string `json:"nodeID"`
 	NextViewID int64  `json:"nextviewID"`
 	StableCheckPoint int64 `json:"stableCheckPoint"`
-	//C checkpointmsg_set 2f+1
-	//SetP -> a set of preprepare + (preparemsg * 2f+1) from stablecheckpoint to the biggest sequence_num that node received
-	SetP  map[int64]*SetPm	`json:"setP"`
+	SetC map[string]*CheckPointMsg `json:"setC"`//C checkpointmsg_set 2f+1
+	SetP  map[int64]*SetPm	`json:"setP"`//SetP -> a set of preprepare + (preparemsg * 2f+1) from stablecheckpoint to the biggest sequence_num that node received
 }
 
 type SetPm struct {
@@ -56,9 +55,10 @@ type SetPm struct {
 type NewViewMsg struct {
 	NodeID     string `json:"nodeID"`
 	NextViewID int64  `json:"nextviewID"`
-	//V a set containing the valid ViewChageMsg
+	SetViewChangeMsgs map[string]*ViewChangeMsg `json:"setViewchangemsgs"` 	//V a set containing the valid ViewChageMsg 
+	SetPrePrepareMsgs map[int64]*PrePrepareMsg `json:"setPrepreparemsgs"`
 	//O a set of PrePrepareMsgs from latest stable checkpoint(min-s) in V to the highest sequence number(max-s) in a PrepareMsg in V
-	//  new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s
+	// new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s
 }
 
 type MsgType int

@@ -47,16 +47,15 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 }
 
 
-func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp map[int64]*SetPm) (*ViewChangeMsg, error) {
+func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp map[int64]*SetPm, setc map[string]*CheckPointMsg) (*ViewChangeMsg, error) {
 
 	return &ViewChangeMsg{
 		NodeID: viewchangestate.NodeID,
 		NextViewID: viewchangestate.NextViewID,
 		StableCheckPoint: viewchangestate.StableCheckPoint,
+		SetC: setc,
 		SetP: setp,
 	}, nil
-
-
 
 	return nil, nil
 }
@@ -67,12 +66,17 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	//TODO: verify viewchangeMsg
 
 	//check received viewchangeMsg SetP
-	fmt.Println("**************a set of SetP!!!******************")
+	/*
 	for v, _ := range viewchangeMsg.SetP {
 		fmt.Println("    === > Preprepare : ", viewchangeMsg.SetP[v].PrePrepareMsg)
 		fmt.Println("    === > Prepare : ", viewchangeMsg.SetP[v].PrepareMsgs)
 	}
 
+	fmt.Println("**************a set of SetC******************")
+	for c, _ := range viewchangeMsg.SetC {
+		fmt.Println("    === > checkpoint : ", viewchangeMsg.SetC[c])
+	}
+	*/
 	// Append msg to its logs
 	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgMutex.Lock()
 	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs[viewchangeMsg.NodeID] = viewchangeMsg
@@ -83,15 +87,12 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	fmt.Printf("[<<<<<<<<ViewChange-Vote>>>>>>>>>>]: %d\n", newTotalViewchangeMsg)
 
 
-	if int(newTotalViewchangeMsg) > 2*viewchangestate.f {
-		return nil, nil
-	}
-
-	if viewchangestate.viewchanged() {
-		
+	if int(newTotalViewchangeMsg) >= 2*viewchangestate.f+1 && viewchangestate.viewchanged() {
+			
 		return &NewViewMsg{
 			NextViewID: viewchangestate.NextViewID,
-			NodeID : viewchangestate.NodeID,
+			NodeID: viewchangestate.NodeID,
+			SetViewChangeMsgs: viewchangestate.GetViewChangeMsgs(),
 		}, nil
 		
 	}
@@ -101,9 +102,22 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 
 
 func (viewchangestate *ViewChangeState) viewchanged() bool {
-	if len(viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs) < 2*viewchangestate.f {
+	if int(atomic.LoadInt32(&viewchangestate.ViewChangeMsgLogs.TotalViewChangeMsg)) < 2*viewchangestate.f +1{
 		return false
 	}
 
 	return true
 }
+
+func (viewchangestate *ViewChangeState) GetViewChangeMsgs() map[string]*ViewChangeMsg {
+	newMap := make(map[string]*ViewChangeMsg)
+
+	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgMutex.Lock()
+	for k, v := range viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs {
+		newMap[k] = v
+	}
+	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgMutex.Unlock()
+
+	return newMap
+}
+
