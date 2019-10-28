@@ -223,7 +223,7 @@ func (server *Server) sendDummyMsg() {
 		case <-ticker.C:
 			// Send message from the current (changed) primary node.
 			// Changing view must precedes sending request message.
-			primaryNode := server.node.getPrimaryByID(currentView)
+			primaryNode := server.node.getPrimaryInfoByID(currentView)
 
 			// TODO: change view based on that of the current node.
 			currentView++

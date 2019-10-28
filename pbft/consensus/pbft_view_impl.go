@@ -86,7 +86,6 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	// Print current voting status
 	fmt.Printf("[<<<<<<<<ViewChange-Vote>>>>>>>>>>]: %d\n", newTotalViewchangeMsg)
 
-
 	if int(newTotalViewchangeMsg) >= 2*viewchangestate.f+1 && viewchangestate.viewchanged() {
 			
 		return &NewViewMsg{

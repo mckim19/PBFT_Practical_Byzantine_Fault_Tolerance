@@ -13,10 +13,10 @@ func (node *Node) StartViewChange() {
 	//close(node.MsgEntrance)
 	//fmt.Println("close Entrance")
 	//Create nextviewid
-	var nextviewid =  node.View.ID + 1
+	var nextviewid = node.View.ID + 1
 
+	//Create ViewChangeState
 	if node.ViewChangeState == nil {
-	//	//Create ViewChangeState
 		node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 	}
 
@@ -43,7 +43,6 @@ func (node *Node) StartViewChange() {
 	//Create ViewChangeMsg
 	viewChangeMsg, err := node.ViewChangeState.CreateViewChangeMsg(setp, setc)
 
-	fmt.Println("CreateViewChangeMsg")
 	if err != nil {
 		node.MsgError <- []error{err}
 		return
@@ -64,17 +63,18 @@ func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
 
 	node.ViewChangeState = nil
 	
-	//node.IsViewChanging = false
+	node.IsViewChanging = false
 	return nil
 }
 
 func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	LogMsg(viewchangeMsg)
 
+	//Create nextviewid
+	var nextviewid =  node.View.ID + 1
 
 	if node.ViewChangeState == nil && node.View.ID != viewchangeMsg.NextViewID{
-		//Create nextviewid
-		var nextviewid =  node.View.ID + 1
+
 		//Create ViewChangeState
 		node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 	}
@@ -84,16 +84,43 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 		return err
 	}
 
+	var nextPrimary = node.getPrimaryInfoByID(nextviewid)
 
-	if newView != nil && node.isMyNodePrimary() {
+	if newView != nil && node.MyInfo == nextPrimary {
 		//Change View and Primary
 		node.updateView(newView.NextViewID)
 
+
+		var min_s int64 
+		min_s = 0
+		//var max_s int64
+		//max_s = 0
+
+
 		fmt.Println("**************N E W V I E W******************")
 		for nv, _ := range newView.SetViewChangeMsgs {
-		fmt.Println("    === > newView.SetViewChangeMsgs : ", newView.SetViewChangeMsgs[nv])
+			fmt.Println("    === > newView.SetViewChangeMsgs : ", newView.SetViewChangeMsgs[nv])
+			fmt.Println("    === > newView.SetViewChangeMsgs..StableCheckPoint : ", newView.SetViewChangeMsgs[nv].StableCheckPoint)
+			
+			//min_s = the latest stable checkpoint
+			if min_s < newView.SetViewChangeMsgs[nv].StableCheckPoint {
+				min_s = newView.SetViewChangeMsgs[nv].StableCheckPoint 
+			}
+
+
+			for seq, _ := range newView.SetViewChangeMsgs[nv].SetP {
+				fmt.Println("seq ", seq)
+				fmt.Println("newView.SetViewChangeMsgs.SetP : ", newView.SetViewChangeMsgs[nv].SetP[seq])
+				//newView.SetViewChangeMsgs[nv].SetP[seq].PrePrepareMsg //exist?
+				//newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsg
+				for nodeid, _ := range newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs {
+					fmt.Println("nodeid ", nodeid)
+					fmt.Println("newView.SetViewChangeMsgs.SetP.PrepareMsg : ", newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs[nodeid])
+				}
+			}
 		}
 
+		fmt.Println("min_s ", min_s)
 		fmt.Println("newView")
 
 		LogStage("NewView", false)
@@ -106,19 +133,20 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 
 func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 
+	fmt.Printf("<<<<<<<<NewView>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
+
 	//Change View and Primary
 	node.updateView(msg.NextViewID)
 
 	node.ViewChangeState = nil
-	fmt.Printf("<<<<<<<<NewView>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
 
-	//node.IsViewChanging = false
+	node.IsViewChanging = false
 	return nil
 }
 
 func (node *Node) updateView(viewID int64) {
 	node.View.ID = viewID
-	node.View.Primary = node.getPrimaryByID(viewID)
+	node.View.Primary = node.getPrimaryInfoByID(viewID)
 
 	fmt.Println("ViewID:", node.View.ID, "Primary:", node.View.Primary.NodeID)
 }
@@ -127,7 +155,7 @@ func (node *Node) isMyNodePrimary() bool {
 	return node.MyInfo.NodeID == node.View.Primary.NodeID
 }
 
-func (node *Node) getPrimaryByID(viewID int64) *NodeInfo {
+func (node *Node) getPrimaryInfoByID(viewID int64) *NodeInfo {
 	viewIdx := viewID % int64(len(node.NodeTable))
 	return node.NodeTable[viewIdx]
 }
