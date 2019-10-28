@@ -2,30 +2,30 @@ package network
 
 import (
 	"fmt"
+	"time"
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 )
 
 func LogMsg(msg interface{}) {
-	switch msg.(type) {
+	t := time.Now().UnixNano()
+
+	switch m := msg.(type) {
 	case *consensus.RequestMsg:
-		reqMsg := msg.(*consensus.RequestMsg)
-		fmt.Printf("[REQUEST] ClientID: %s, Timestamp: %d, Operation: %s\n", reqMsg.ClientID, reqMsg.Timestamp, reqMsg.Operation)
+		fmt.Printf("%d: [REQUEST] ClientID: %s, Timestamp: %d, Operation: %s\n", t, m.ClientID, m.Timestamp, m.Operation)
 	case *consensus.PrePrepareMsg:
-		prePrepareMsg := msg.(*consensus.PrePrepareMsg)
-		fmt.Printf("[PREPREPARE] SequenceID: %d\n", prePrepareMsg.SequenceID)
+		fmt.Printf("%d: [PREPREPARE] SequenceID: %d\n", t, m.SequenceID)
 	case *consensus.VoteMsg:
-		voteMsg := msg.(*consensus.VoteMsg)
-		if voteMsg.MsgType == consensus.PrepareMsg {
-			fmt.Printf("[PREPARE] NodeID: %s\n", voteMsg.NodeID)
-		} else if voteMsg.MsgType == consensus.CommitMsg {
-			fmt.Printf("[COMMIT] NodeID: %s\n", voteMsg.NodeID)
+		if m.MsgType == consensus.PrepareMsg {
+			fmt.Printf("%d: [PREPARE] NodeID: %s\n", t, m.NodeID)
+		} else if m.MsgType == consensus.CommitMsg {
+			fmt.Printf("%d: [COMMIT] NodeID: %s\n", t, m.NodeID)
 		}
+	case *consensus.ReplyMsg:
+		fmt.Printf("%d: [REPLY] Result: %s by %s\n", t, m.Result, m.NodeID)
 	case *consensus.CheckPointMsg:
-		CheckPointMsg := msg.(*consensus.CheckPointMsg)
-		fmt.Printf("[CheckPointMsg] NodeID: %s\n", CheckPointMsg.NodeID)
+		fmt.Printf("%d: [CheckPointMsg] NodeID: %s\n", t, m.NodeID)
 	case *consensus.ViewChangeMsg:
-		viewchangeMsg := msg.(*consensus.ViewChangeMsg)
-		fmt.Printf("[ViewChangeMsg] NodeID: %s\n", viewchangeMsg.NodeID)
+		fmt.Printf("%d: [ViewChangeMsg] NodeID: %s\n", t, m.NodeID)
 	}
 }
 

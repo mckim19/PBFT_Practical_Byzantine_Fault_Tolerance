@@ -135,6 +135,7 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) {
 
 // When REQUEST message is broadcasted, start consensus.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
+	LogMsg(reqMsg)
 	// Create a new state object.
 	state := node.createState(reqMsg.Timestamp)
 
@@ -282,7 +283,7 @@ func (node *Node) GetCommit(state consensus.PBFT, commitMsg *consensus.VoteMsg) 
 }
 
 func (node *Node) GetReply(msg *consensus.ReplyMsg) {
-	fmt.Printf("Result: %s by %s\n", msg.Result, msg.NodeID)
+	LogMsg(msg)
 }
 
 func (node *Node) createState(timeStamp int64) consensus.PBFT {
