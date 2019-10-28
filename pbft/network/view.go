@@ -79,8 +79,6 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 		node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 	}
 
-
-	//newViewMsg, err := node.ViewChangeState.ViewChange(viewchangeMsg)
 	newView, err := node.ViewChangeState.ViewChange(viewchangeMsg)
 	if err != nil {
 		return err

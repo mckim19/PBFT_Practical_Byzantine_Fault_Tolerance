@@ -89,10 +89,6 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 
 	if int(newTotalViewchangeMsg) >= 2*viewchangestate.f+1 && viewchangestate.viewchanged() {
 			
-		//setviewchangemsgs := make(map[string]*ViewChangeMsg)
-
-		//setviewchangemsgs = viewchangestate.GetViewChangeMsgs()
-
 		return &NewViewMsg{
 			NextViewID: viewchangestate.NextViewID,
 			NodeID: viewchangestate.NodeID,
