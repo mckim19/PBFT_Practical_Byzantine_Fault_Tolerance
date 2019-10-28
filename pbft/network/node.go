@@ -32,10 +32,12 @@ type Node struct {
 	// Mutexes for preventing from concurrent access
 	StatesMutex sync.RWMutex
 
-	// CheckpointMsg save
+	// Saved checkpoint messages on this node
+	// key: sequenceID, value: map(key: nodeID, value: checkpointMsg)
+	CheckPointMsgsLog   map[int64]map[string]*consensus.CheckPointMsg
+
+	// The stable checkpoint that 2f + 1 nodes agreed
 	StableCheckPoint    int64
-	CheckPointSendPoint int64
-	CheckPointMsgsLog   map[int64]map[string]*consensus.CheckPointMsg // key: sequenceID, value: map(key: nodeID, value: checkpointmsg)
 }
 
 type NodeInfo struct {
@@ -91,9 +93,8 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 		MsgError: make(chan []error),
 		ViewMsgEntrance: make(chan interface{}, len(nodeTable)*3),
 
-		StableCheckPoint:  0,
-		CheckPointSendPoint: 0,
 		CheckPointMsgsLog: make(map[int64]map[string]*consensus.CheckPointMsg),
+		StableCheckPoint:  0,
 	}
 
 	atomic.StoreInt64(&node.TotalConsensus, 0)
@@ -130,11 +131,6 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 	node.MsgOutbound <- &MsgOut{Path: node.MyInfo.Url + path, Msg: jsonMsg}
 }
 
-func (node *Node) Reply(msg *consensus.ReplyMsg) {
-	// Broadcast reply.
-	node.Broadcast(msg, "/reply")
-}
-
 // When REQUEST message is broadcasted, start consensus.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	LogMsg(reqMsg)
@@ -144,7 +140,7 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	// Increment the number of request message atomically.
 	// TODO: Currently, StartConsensus must succeed.
 	newTotalConsensus := atomic.AddInt64(&node.TotalConsensus, 1)
-	prePrepareMsg, _ := state.StartConsensus(reqMsg, newTotalConsensus)
+	prePrepareMsg := state.StartConsensus(reqMsg, newTotalConsensus)
 
 	// Register state into node and update last sequence number.
 	node.StatesMutex.Lock()
@@ -212,9 +208,9 @@ func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp in
 
 			if msgTotalCnt == 0 ||
 			   lastCommittedMsg.SequenceID < state.GetSequenceID() {
-			   	//startviewchange
+				//startviewchange
 				fmt.Println("IsViewchanging = true")
-			   	node.IsViewChanging = true
+				node.IsViewChanging = true
 				// Broadcast view change message.
 				node.MsgError <- []error{ctx.Err()}
 				node.StartViewChange()
@@ -240,7 +236,7 @@ func (node *Node) GetPrePrepare(state consensus.PBFT, prePrepareMsg *consensus.P
 		return
 	}
 
-	// Attach node ID to the message
+	// Attach node ID to the message.
 	prepareMsg.NodeID = node.MyInfo.NodeID
 
 	LogStage("Pre-prepare", true)
@@ -262,7 +258,7 @@ func (node *Node) GetPrepare(state consensus.PBFT, prepareMsg *consensus.VoteMsg
 		return
 	}
 
-	// Attach node ID to the message
+	// Attach node ID to the message.
 	commitMsg.NodeID = node.MyInfo.NodeID
 
 	LogStage("Prepare", true)
@@ -284,7 +280,7 @@ func (node *Node) GetCommit(state consensus.PBFT, commitMsg *consensus.VoteMsg) 
 		return
 	}
 
-	// Attach node ID to the message
+	// Attach node ID to the message.
 	replyMsg.NodeID = node.MyInfo.NodeID
 
 	// Pass the incomplete reply message through MsgExecution
@@ -375,8 +371,6 @@ func (node *Node) resolveMsg() {
 			err = node.GetNewView(msg)
 		}
 
-
-
 		if err != nil {
 			// Print error.
 			node.MsgError <- []error{err}
@@ -401,15 +395,13 @@ func (node *Node) executeMsg() {
 
 		// Execute operation for all the consecutive messages.
 		for {
-			var lastSequenceID int64
+			var lastSequenceID int64 = 0
 
 			// Find the last committed message.
 			msgTotalCnt := len(node.CommittedMsgs)
 			if msgTotalCnt > 0 {
 				lastCommittedMsg := node.CommittedMsgs[msgTotalCnt - 1]
 				lastSequenceID = lastCommittedMsg.SequenceID
-			} else {
-				lastSequenceID = 0
 			}
 
 			// Stop execution if the message for the
@@ -431,24 +423,17 @@ func (node *Node) executeMsg() {
 			// corresponding committed message to node.
 			node.CommittedMsgs = append(node.CommittedMsgs, p.committedMsg)
 
-			node.Reply(p.replyMsg)
-
+			// Broadcast reply.
+			node.Broadcast(p.replyMsg, "/reply")
 			LogStage("Reply", true)
-			
 
-			nCheckPoint := node.CheckPointSendPoint + periodCheckPoint
-			msgTotalCnt1 := len(node.CommittedMsgs)
-
-			if node.CommittedMsgs[msgTotalCnt1 - 1].SequenceID ==  nCheckPoint{
-				node.CheckPointSendPoint = nCheckPoint
-
-				SequenceID := node.CommittedMsgs[len(node.CommittedMsgs) - 1].SequenceID
-				checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.CommittedMsgs[msgTotalCnt1 - 1])
+			// Create checkpoint every `periodCheckPoint` committed message.
+			if (lastSequenceID + 1) % periodCheckPoint == 0 {
+				checkPointMsg, _ := node.getCheckPointMsg(lastSequenceID + 1, node.MyInfo.NodeID, p.committedMsg)
 				LogStage("CHECKPOINT", false)
 				node.Broadcast(checkPointMsg, "/checkpoint")
 				node.CheckPoint(checkPointMsg)
 			}
-			
 
 			delete(pairs, lastSequenceID + 1)
 		}

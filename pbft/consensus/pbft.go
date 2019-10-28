@@ -1,7 +1,7 @@
 package consensus
 
 type PBFT interface {
-	StartConsensus(request *RequestMsg, sequenceID int64) (*PrePrepareMsg, error)
+	StartConsensus(request *RequestMsg, sequenceID int64) *PrePrepareMsg
 	PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error)
 	Prepare(prepareMsg *VoteMsg) (*VoteMsg, error)
 	Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error)
