@@ -19,6 +19,7 @@ type Node struct {
 	ViewChangeState *consensus.ViewChangeState
 	CommittedMsgs   []*consensus.RequestMsg // kinda block.
 	TotalConsensus  int64 // atomic. number of consensus started so far.
+	IsViewChanging  bool
 
 	// Channels
 	MsgEntrance   chan interface{}
@@ -75,6 +76,7 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
 		MyInfo:    myInfo,
 		NodeTable: nodeTable,
 		View:      &View{},
+		IsViewChanging: false,
 
 		// Consensus-related struct
 		States:          make(map[int64]consensus.PBFT),
@@ -201,9 +203,17 @@ func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp in
 		case <-ctx.Done():
 			// Check the consensus of the current state precedes
 			// that of the last committed message in this node.
+			var lastCommittedMsg *consensus.RequestMsg = nil
 			msgTotalCnt := len(node.CommittedMsgs)
-			lastCommittedMsg := node.CommittedMsgs[msgTotalCnt - 1]
-			if lastCommittedMsg.SequenceID < state.GetSequenceID() {
+			if msgTotalCnt > 0 {
+				lastCommittedMsg = node.CommittedMsgs[msgTotalCnt - 1]
+			}
+
+			if msgTotalCnt == 0 ||
+			   lastCommittedMsg.SequenceID < state.GetSequenceID() {
+			   	//startviewchange
+				fmt.Println("IsViewchanging = true")
+			   	node.IsViewChanging = true
 				// Broadcast view change message.
 				node.MsgError <- []error{ctx.Err()}
 				node.StartViewChange()
@@ -297,7 +307,9 @@ func (node *Node) dispatchMsg() {
 	for {
 		select {
 		case msg := <-node.MsgEntrance:
-			node.routeMsg(msg)
+			if !node.IsViewChanging {
+				node.routeMsg(msg)
+			}
 		case viewmsg := <-node.ViewMsgEntrance:
 			node.routeMsg(viewmsg)
 		}

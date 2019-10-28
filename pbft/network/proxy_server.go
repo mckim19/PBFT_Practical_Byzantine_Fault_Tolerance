@@ -203,7 +203,6 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 func (server *Server) sendDummyMsg() {
 	// Send message from the current (changed) primary node.
 	// Changing view must precedes sending request message.
-	server.node.updateView(server.node.View.ID + 1)
 
 	primaryNode := server.node.View.Primary
 	if primaryNode.NodeID != server.node.MyInfo.NodeID {

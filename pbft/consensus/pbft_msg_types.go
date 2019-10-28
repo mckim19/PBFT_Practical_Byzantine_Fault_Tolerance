@@ -56,9 +56,9 @@ type NewViewMsg struct {
 	NodeID     string `json:"nodeID"`
 	NextViewID int64  `json:"nextviewID"`
 	SetViewChangeMsgs map[string]*ViewChangeMsg `json:"setViewchangemsgs"` 	//V a set containing the valid ViewChageMsg 
-	//SetPrePrepageMsgs map[string]*PrePrepareMsg `json:"setPrepreparemsgs"`
+	SetPrePrepareMsgs map[int64]*PrePrepareMsg `json:"setPrepreparemsgs"`
 	//O a set of PrePrepareMsgs from latest stable checkpoint(min-s) in V to the highest sequence number(max-s) in a PrepareMsg in V
-	//  new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s
+	// new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s
 }
 
 type MsgType int

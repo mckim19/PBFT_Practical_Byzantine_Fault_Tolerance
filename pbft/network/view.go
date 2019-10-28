@@ -15,8 +15,10 @@ func (node *Node) StartViewChange() {
 	//Create nextviewid
 	var nextviewid =  node.View.ID + 1
 
-	//Create ViewChangeState
-	node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
+	if node.ViewChangeState == nil {
+	//	//Create ViewChangeState
+		node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
+	}
 
 	//a set of PreprepareMsg and PrepareMsgs for veiwchange
 	setp := make(map[int64]*consensus.SetPm)
@@ -62,15 +64,21 @@ func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) error {
 
 	node.ViewChangeState = nil
 	
+	//node.IsViewChanging = false
 	return nil
 }
 
 func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 	LogMsg(viewchangeMsg)
 
-	if node.ViewChangeState == nil {
-		return nil
+
+	if node.ViewChangeState == nil && node.View.ID != viewchangeMsg.NextViewID{
+		//Create nextviewid
+		var nextviewid =  node.View.ID + 1
+		//Create ViewChangeState
+		node.ViewChangeState = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 	}
+
 
 	//newViewMsg, err := node.ViewChangeState.ViewChange(viewchangeMsg)
 	newView, err := node.ViewChangeState.ViewChange(viewchangeMsg)
@@ -103,7 +111,10 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 	//Change View and Primary
 	node.updateView(msg.NextViewID)
 
+	node.ViewChangeState = nil
 	fmt.Printf("<<<<<<<<NewView>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
+
+	//node.IsViewChanging = false
 	return nil
 }
 
