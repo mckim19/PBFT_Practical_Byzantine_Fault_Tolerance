@@ -111,14 +111,17 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 			for seq, _ := range newView.SetViewChangeMsgs[nv].SetP {
 				fmt.Println("seq ", seq)
 				fmt.Println("newView.SetViewChangeMsgs.SetP : ", newView.SetViewChangeMsgs[nv].SetP[seq])
-				//newView.SetViewChangeMsgs[nv].SetP[seq].PrePrepareMsg //exist?
-				//newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsg
-				for nodeid, _ := range newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs {
-					fmt.Println("nodeid ", nodeid)
-					fmt.Println("newView.SetViewChangeMsgs.SetP.PrepareMsg : ", newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs[nodeid])
-				}
+				//if newView.SetViewChangeMsgs[nv].SetP[seq].PrePrepareMsg //is there valid prepreparemsg + 
+				//if len(newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs) >= valid 2f prepare || newView.SetPrePrepareMsgs[seq] == nil
+				//	newView.SetPrePrepareMsgs[seq] =  PrePrepareMsg(newView.NextViewID, seq , node.States[seq].requestdigest)
+				//else 
+				//	newView.SetPrePrepareMsgs[seq] =  nil	
 			}
 		}
+
+		//if newView.SetPrePrepareMsgs[seq] ==  nil
+		//	for seq, _ := range newView.SetViewChangeMsgs[nv].SetP
+		//		newView.SetPrePrepareMsgs[seq] =  PrePrepareMsg(newView.NextViewID, seq , nil)
 
 		fmt.Println("min_s ", min_s)
 		fmt.Println("newView")

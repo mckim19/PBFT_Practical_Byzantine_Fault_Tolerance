@@ -92,6 +92,7 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 			NextViewID: viewchangestate.NextViewID,
 			NodeID: viewchangestate.NodeID,
 			SetViewChangeMsgs: viewchangestate.GetViewChangeMsgs(),
+			SetPrePrepareMsgs: nil,
 		}, nil
 		
 	}
