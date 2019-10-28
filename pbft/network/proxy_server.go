@@ -201,15 +201,6 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 }
 
 func (server *Server) sendDummyMsg() {
-	// Send message from the current (changed) primary node.
-	// Changing view must precedes sending request message.
-	server.node.updateView(server.node.View.ID + 1)
-
-	primaryNode := server.node.View.Primary
-	if primaryNode.NodeID != server.node.MyInfo.NodeID {
-		return
-	}
-
 	// Set periodic send signal.
 	ticker := time.NewTicker(time.Millisecond * 500)
 	defer ticker.Stop()
@@ -221,25 +212,37 @@ func (server *Server) sendDummyMsg() {
 	}
 	data[len(data) - 1] = 0
 
-	u := url.URL{Scheme: "ws", Host: primaryNode.Url, Path: "/req"}
-	log.Printf("connecting to %s", u.String())
+	currentView := server.node.View.ID
 
+	// Current node sends dummy message when private view (currentView)
+	// is primary. (e.g., if the node index in the node table is 3,
+	// and current view ID is 1, the third dummy request message
+	// is sent from the current node.)
 	for {
 		select {
 		case <-ticker.C:
-			c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-			if err != nil {
-				log.Fatal("dial:", err)
+			// Send message from the current (changed) primary node.
+			// Changing view must precedes sending request message.
+			primaryNode := server.node.getPrimaryByID(currentView)
+
+			// TODO: change view based on that of the current node.
+			currentView++
+			if primaryNode.NodeID != server.node.MyInfo.NodeID {
+				continue
 			}
 
-			// Create a dummy message and send it.
-			dummy := dummyMsg("Op1", "Client1", data)
-			err = c.WriteMessage(websocket.TextMessage, dummy)
+			// Create a dummy message.
+			u := primaryNode.Url + "/req"
+			dummy := dummyMsg("Op1", primaryNode.NodeID, data)
+
+			// Broadcast the dummy message.
+			errCh := make(chan error, 1)
+			log.Printf("Broadcasting dummy message from %s", u)
+			broadcast(errCh, u, dummy)
+			err := <-errCh
 			if err != nil {
-				log.Println("write:", err)
-				return
+				log.Println(err)
 			}
-			c.Close()
 		}
 	}
 }

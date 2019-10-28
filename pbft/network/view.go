@@ -92,12 +92,16 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 
 func (node *Node) updateView(viewID int64) {
 	node.View.ID = viewID
-	viewIdx := viewID % int64(len(node.NodeTable))
-	node.View.Primary = node.NodeTable[viewIdx]
+	node.View.Primary = node.getPrimaryByID(viewID)
 
 	fmt.Println("ViewID:", node.View.ID, "Primary:", node.View.Primary.NodeID)
 }
 
 func (node *Node) isMyNodePrimary() bool {
 	return node.MyInfo.NodeID == node.View.Primary.NodeID
+}
+
+func (node *Node) getPrimaryByID(viewID int64) *NodeInfo {
+	viewIdx := viewID % int64(len(node.NodeTable))
+	return node.NodeTable[viewIdx]
 }
