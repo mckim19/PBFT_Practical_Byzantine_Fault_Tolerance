@@ -62,10 +62,10 @@ type MsgOut struct {
 const ConsensusDeadline = time.Millisecond * 1000
 
 // Cooling time to escape frequent error, or message sending retry.
-const CoolingTime = time.Millisecond * 20
+const CoolingTime = time.Millisecond * 2
 
 // Number of error messages to start cooling.
-const CoolingTotalErrMsg = 100
+const CoolingTotalErrMsg = 5
 
 // Number of outbound connection for a node.
 const MaxOutboundConnection = 1000
