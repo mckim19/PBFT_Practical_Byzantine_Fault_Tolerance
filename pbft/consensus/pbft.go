@@ -7,6 +7,7 @@ type PBFT interface {
 	Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error)
 
 	GetSequenceID() int64
+	GetDigest() string
 	GetF() int
 
 	GetMsgReceiveChannel() <-chan interface{}

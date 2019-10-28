@@ -15,11 +15,11 @@ func (node *Node) GetCheckPoint(CheckPointMsg *consensus.CheckPointMsg) error {
 }
 
 func (node *Node) getCheckPointMsg(SequenceID int64, nodeID string, ReqMsgs *consensus.RequestMsg) (*consensus.CheckPointMsg, error) {
-
-	digest, err := consensus.Digest(ReqMsgs)
+	state, err := node.getState(SequenceID)
 	if err != nil {
 		return nil, err
 	}
+	digest := state.GetDigest()
 
 	return &consensus.CheckPointMsg{
 		SequenceID: SequenceID,
@@ -103,9 +103,8 @@ func (node *Node) CheckPointHistory(SequenceID int64) error {
 
 	node.StatesMutex.RLock()
 	for seqID, state := range node.States {
-		digest, _ := consensus.Digest(state.GetReqMsg())
 		fmt.Println(" Sequence N : ", seqID)
-		fmt.Println("    === > ReqMsgs : ", digest)
+		fmt.Println("    === > ReqMsg (digest) : ", state.GetDigest())
 		fmt.Println("    === > Preprepare : ", state.GetPrePrepareMsg())
 		fmt.Println("    === > Prepare : ", state.GetPrepareMsgs())
 		fmt.Println("    === > Commit : ", state.GetCommitMsgs())

@@ -19,6 +19,9 @@ type State struct {
 	// f = (n-1) / 3
 	// e.g., n = 5, f = 1
 	F int
+
+	// Cache the invariant digest of ReqMsg for each sequence ID.
+	digest string
 }
 
 type MsgLogs struct {
@@ -87,16 +90,13 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	state.MsgLogs.ReqMsg = request
 
 	// Get the digest of the request message
-	digest, err := Digest(request)
-	if err != nil {
-		return nil, err
-	}
+	state.digest, _ = Digest(request)
 
 	// Create PREPREPARE message.
 	prePrepareMsg := &PrePrepareMsg{
 		ViewID:     state.ViewID,
 		SequenceID: request.SequenceID,
-		Digest:     digest,
+		Digest:     state.digest,
 	}
 
 	// Accessing to the message log without locking is safe because
@@ -217,6 +217,10 @@ func (state *State) GetSequenceID() int64 {
 
 }
 
+func (state *State) GetDigest() string {
+	return state.digest
+}
+
 func (state *State) GetF() int {
 	return state.F
 }
@@ -271,14 +275,9 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 		return fmt.Errorf("state.SequenceID = %d, sequenceID = %d", state.SequenceID, sequenceID)
 	}
 
-	digest, err := Digest(state.MsgLogs.ReqMsg)
-	if err != nil {
-		return err
-	}
-
 	// Check digest.
-	if digestGot != digest {
-		return fmt.Errorf("digest = %s, digestGot = %s", digest, digestGot)
+	if state.digest != digestGot {
+		return fmt.Errorf("state.digest = %s, digestGot = %s", state.digest, digestGot)
 	}
 
 	return nil

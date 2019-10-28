@@ -267,10 +267,10 @@ func broadcast(errCh chan<- error, url string, msg []byte) {
 
 func dummyMsg(operation string, clientID string, data []byte) []byte {
 	var msg consensus.RequestMsg
-	msg.Timestamp = time.Now().UnixNano()
 	msg.Operation = operation
 	msg.ClientID = clientID
 	msg.Data = string(data)
+	msg.Timestamp = time.Now().UnixNano()
 
 	// {"operation": "Op1", "clientID": "Client1", "data": "JJWEJPQOWJE", "timestamp": 190283901}
 	jsonMsg, err := json.Marshal(&msg)
