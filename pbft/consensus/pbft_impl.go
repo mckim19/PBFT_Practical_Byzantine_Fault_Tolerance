@@ -22,6 +22,9 @@ type State struct {
 
 	// Cache the invariant digest of ReqMsg for each sequence ID.
 	digest string
+
+	// checkpointdelete check
+	succChkPointDelete int64
 }
 
 type MsgLogs struct {
@@ -69,6 +72,7 @@ func CreateState(viewID int64, nodeID string, totNodes int) *State {
 		MsgState: make(chan interface{}, totNodes), // stack enough
 
 		F: (totNodes - 1) / 3,
+		succChkPointDelete: 0,
 	}
 
 	return state
@@ -240,7 +244,12 @@ func (state *State) GetReqMsg() *RequestMsg {
 func (state *State) GetPrePrepareMsg() *PrePrepareMsg {
 	return state.MsgLogs.PrePrepareMsg
 }
-
+func (state *State) GetSuccChkPoint() int64 {
+	return state.succChkPointDelete
+}
+func (state *State) SetSuccChkPoint(num int64) {
+	state.succChkPointDelete = num
+}
 func (state *State) GetPrepareMsgs() map[string]*VoteMsg {
 	newMap := make(map[string]*VoteMsg)
 

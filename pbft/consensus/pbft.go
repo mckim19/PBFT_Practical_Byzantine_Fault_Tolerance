@@ -17,4 +17,6 @@ type PBFT interface {
 	GetPrePrepareMsg() *PrePrepareMsg
 	GetPrepareMsgs() map[string]*VoteMsg
 	GetCommitMsgs() map[string]*VoteMsg
+	GetSuccChkPoint() int64
+	SetSuccChkPoint(int64)
 }
