@@ -19,5 +19,8 @@
 # Log files
 logs/
 
+# Key files
+keys/
+
 # Default executable file built on Linux
 main
