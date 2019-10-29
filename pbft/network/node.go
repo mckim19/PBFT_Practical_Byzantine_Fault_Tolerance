@@ -431,17 +431,16 @@ func (node *Node) executeMsg() {
 			// Create checkpoint every `periodCheckPoint` committed message.
 			if (lastSequenceID + 1) % periodCheckPoint == 0 {
 				LogStage("CHECKPOINT", false)
-				// Miss CheckPointMsg Check.
+				// Send CHECKPOINT message until it is possible.
 				for sequenceid := node.StableCheckPoint;
 				    sequenceid < lastSequenceID + 1;
 				    sequenceid += periodCheckPoint {
-					chkSequenceid := int64(sequenceid + periodCheckPoint)
-					ok := node.CheckPointMissCheck(sequenceid)
-					if ok {
-						checkPointMsg := node.createCheckPointMsg(chkSequenceid, node.MyInfo.NodeID)
-						node.Broadcast(checkPointMsg, "/checkpoint")
-						node.CheckPoint(checkPointMsg)
+					if !node.CheckPointMissCheck(sequenceid) {
+						break
 					}
+					checkPointMsg := node.createCheckPointMsg(sequenceid + periodCheckPoint, node.MyInfo.NodeID)
+					node.Broadcast(checkPointMsg, "/checkpoint")
+					node.CheckPoint(checkPointMsg)
 				}
 			}
 

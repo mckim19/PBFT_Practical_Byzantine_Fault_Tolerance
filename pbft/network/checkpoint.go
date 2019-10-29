@@ -51,14 +51,13 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 	msgsLog[msg.NodeID] = msg
 	node.CheckPointMutex.Unlock()
 
-	// get seuqenceID State
 	state, _ := node.getState(msg.SequenceID) // Must succeed.
 
 	// Checkpoint only once for each sequence number.
 	if node.Checkpointchk(state) && state.GetSuccChkPoint() != 1 {
 		fStableCheckPoint := node.StableCheckPoint + periodCheckPoint
 
-		// Delete Checkpoint Message Logs
+		// Delete Checkpoint Message Logs.
 		node.CheckPointMutex.Lock()
 		for v, _ := range node.CheckPointMsgsLog {
 			if int64(v) < fStableCheckPoint {
@@ -67,7 +66,7 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 		}
 		node.CheckPointMutex.Unlock()
 
-		// Delete State Message Logs
+		// Delete State Message Logs.
 		node.StatesMutex.Lock()
 		for v, _ := range node.States {
 			if int64(v) < fStableCheckPoint {
@@ -88,10 +87,14 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 	}
 }
 
-// each for sequence ID, commitMsgs Check
+// Check the COMMIT messages, for given `periodCheckPoint` consecutive
+// sequence numbers, are enough including the messages for the current node.
 func (node *Node) CheckPointMissCheck(sequenceID int64) bool {
 	for i := (sequenceID + 1); i <= (sequenceID + periodCheckPoint); i++ {
-		state, _ := node.getState(i) // Must succeed.
+		state, _ := node.getState(i)
+		if state == nil {
+			return false
+		}
 		if len(state.GetCommitMsgs()) < (2*state.GetF() + 1) &&
 		   state.GetCommitMsgs()[node.MyInfo.NodeID] == nil {
 			return false
