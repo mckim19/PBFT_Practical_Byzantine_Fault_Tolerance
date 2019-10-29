@@ -22,6 +22,9 @@ type State struct {
 
 	// Cache the invariant digest of ReqMsg for each sequence ID.
 	digest string
+
+	// checkpointdelete check
+	succChkPointDelete int64
 }
 
 type MsgLogs struct {
@@ -69,12 +72,13 @@ func CreateState(viewID int64, nodeID string, totNodes int) *State {
 		MsgState: make(chan interface{}, totNodes), // stack enough
 
 		F: (totNodes - 1) / 3,
+		succChkPointDelete: 0,
 	}
 
 	return state
 }
 
-func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PrePrepareMsg, error) {
+func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) *PrePrepareMsg {
 	// From TOCS: The primary picks the "ordering" for execution of
 	// operations requested by clients. It does this by assigning
 	// the next available `sequence number` to a request and sending
@@ -90,7 +94,7 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	state.MsgLogs.ReqMsg = request
 
 	// Get the digest of the request message
-	state.digest, _ = Digest(request)
+	state.digest = Digest(request)
 
 	// Create PREPREPARE message.
 	prePrepareMsg := &PrePrepareMsg{
@@ -104,7 +108,7 @@ func (state *State) StartConsensus(request *RequestMsg, sequenceID int64) (*PreP
 	// i.e., the node has not registered this state yet.
 	state.MsgLogs.PrePrepareMsg = prePrepareMsg
 
-	return prePrepareMsg, nil
+	return prePrepareMsg
 }
 
 func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
@@ -240,7 +244,12 @@ func (state *State) GetReqMsg() *RequestMsg {
 func (state *State) GetPrePrepareMsg() *PrePrepareMsg {
 	return state.MsgLogs.PrePrepareMsg
 }
-
+func (state *State) GetSuccChkPoint() int64 {
+	return state.succChkPointDelete
+}
+func (state *State) SetSuccChkPoint(num int64) {
+	state.succChkPointDelete = num
+}
 func (state *State) GetPrepareMsgs() map[string]*VoteMsg {
 	newMap := make(map[string]*VoteMsg)
 

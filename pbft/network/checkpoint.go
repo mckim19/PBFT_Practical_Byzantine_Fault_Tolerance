@@ -14,26 +14,24 @@ func (node *Node) GetCheckPoint(CheckPointMsg *consensus.CheckPointMsg) error {
 	return nil
 }
 
-func (node *Node) getCheckPointMsg(SequenceID int64, nodeID string, ReqMsgs *consensus.RequestMsg) (*consensus.CheckPointMsg, error) {
-	state, err := node.getState(SequenceID)
-	if err != nil {
-		return nil, err
-	}
+func (node *Node) createCheckPointMsg(sequenceID int64, nodeID string) *consensus.CheckPointMsg {
+	state, _ := node.getState(sequenceID) // Must succeed.
 	digest := state.GetDigest()
 
 	return &consensus.CheckPointMsg{
-		SequenceID: SequenceID,
+		SequenceID: sequenceID,
 		Digest:     digest,
 		NodeID:     nodeID,
-	}, nil
+	}
 }
 
-func (node *Node) Checkpointchk(sequenceID int64) bool {
-	state, _ := node.getState(sequenceID)
-	if state == nil {
-		return false
-	}
+// Check the CHECKPOINT messages for given sequence number are enough
+// including the message for the current node.
+func (node *Node) Checkpointchk(state consensus.PBFT) bool {
+	node.CheckPointMutex.RLock()
+	defer node.CheckPointMutex.RUnlock()
 
+	sequenceID := state.GetSequenceID()
 	if len(node.CheckPointMsgsLog[sequenceID]) >= (2*state.GetF() + 1) &&
 	   node.CheckPointMsgsLog[sequenceID][node.MyInfo.NodeID] != nil {
 		return true
@@ -41,33 +39,34 @@ func (node *Node) Checkpointchk(sequenceID int64) bool {
 
 	return false
 }
+
 func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
-	// Test and test-and-set scheme.
+	// Save CheckPoint each for Sequence and NodeID.
+	node.CheckPointMutex.Lock()
 	msgsLog, ok := node.CheckPointMsgsLog[msg.SequenceID]
 	if !ok {
-		// TODO: do not use state lock.
-		node.StatesMutex.Lock()
-		msgsLog, ok = node.CheckPointMsgsLog[msg.SequenceID]
-		if !ok {
-			msgsLog = make(map[string]*consensus.CheckPointMsg)
-			node.CheckPointMsgsLog[msg.SequenceID] = msgsLog
-		}
-		node.StatesMutex.Unlock()
+		msgsLog = make(map[string]*consensus.CheckPointMsg)
+		node.CheckPointMsgsLog[msg.SequenceID] = msgsLog
 	}
-
-	// Save CheckPoint each for Sequence and NodeID.
 	msgsLog[msg.NodeID] = msg
+	node.CheckPointMutex.Unlock()
+
+	state, _ := node.getState(msg.SequenceID) // Must succeed.
 
 	// Checkpoint only once for each sequence number.
-	if node.Checkpointchk(msg.SequenceID) && !ok {
+	if node.Checkpointchk(state) && state.GetSuccChkPoint() != 1 {
 		fStableCheckPoint := node.StableCheckPoint + periodCheckPoint
-		// Delete Checkpoint Message Logs
+
+		// Delete Checkpoint Message Logs.
+		node.CheckPointMutex.Lock()
 		for v, _ := range node.CheckPointMsgsLog {
 			if int64(v) < fStableCheckPoint {
 				delete(node.CheckPointMsgsLog, v)
 			}
 		}
-		// Delete State Message Logs
+		node.CheckPointMutex.Unlock()
+
+		// Delete State Message Logs.
 		node.StatesMutex.Lock()
 		for v, _ := range node.States {
 			if int64(v) < fStableCheckPoint {
@@ -76,31 +75,47 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 		}
 		node.StatesMutex.Unlock()
 
-		// Node Update StableCheckPoint
+		// Update checkpoint variables for node and state.
+		state.SetSuccChkPoint(1)
 		node.StableCheckPoint = fStableCheckPoint
 		LogStage("CHECKPOINT", true)
 	}
 
-	// print CheckPoint & MsgLogs each for Sequence
+	// Print CheckPoint and MsgLogs.
 	if len(msgsLog) == len(node.NodeTable) {
-		node.CheckPointHistory(msg.SequenceID)
+		node.printCheckPoint()
 	}
 }
 
-// Print CheckPoint History
-func (node *Node) CheckPointHistory(SequenceID int64) error {
-	fmt.Println("CheckPoint History!! ")
+// Check the COMMIT messages, for given `periodCheckPoint` consecutive
+// sequence numbers, are enough including the messages for the current node.
+func (node *Node) CheckPointMissCheck(sequenceID int64) bool {
+	for i := (sequenceID + 1); i <= (sequenceID + periodCheckPoint); i++ {
+		state, _ := node.getState(i)
+		if state == nil {
+			return false
+		}
+		if len(state.GetCommitMsgs()) < (2*state.GetF() + 1) &&
+		   state.GetCommitMsgs()[node.MyInfo.NodeID] == nil {
+			return false
+		}
+	}
+	return true
+}
 
-	for v, _ := range node.CheckPointMsgsLog {
+func (node *Node) printCheckPoint() {
+	fmt.Println("CheckPoint History!!")
+	node.CheckPointMutex.RLock()
+	for v, msgsLog := range node.CheckPointMsgsLog {
 		fmt.Println(" Sequence N : ", v)
 
-		for _, j := range node.CheckPointMsgsLog[v] {
+		for _, j := range msgsLog {
 			fmt.Println("    === >", j)
 		}
-
 	}
-	fmt.Println("MsgLogs History!!")
+	node.CheckPointMutex.RUnlock()
 
+	fmt.Println("MsgLogs History!!")
 	node.StatesMutex.RLock()
 	for seqID, state := range node.States {
 		fmt.Println(" Sequence N : ", seqID)
@@ -110,6 +125,4 @@ func (node *Node) CheckPointHistory(SequenceID int64) error {
 		fmt.Println("    === > Commit : ", state.GetCommitMsgs())
 	}
 	node.StatesMutex.RUnlock()
-
-	return nil
 }

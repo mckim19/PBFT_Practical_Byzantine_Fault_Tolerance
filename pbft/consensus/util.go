@@ -12,12 +12,12 @@ func Hash(content []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func Digest(object interface{}) (string, error) {
+func Digest(object interface{}) string {
 	msg, err := json.Marshal(object)
 
 	if err != nil {
-		return "", err
+		panic(err.Error())
 	}
 
-	return Hash(msg), nil
+	return Hash(msg)
 }
