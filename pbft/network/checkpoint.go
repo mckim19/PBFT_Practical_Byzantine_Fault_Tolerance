@@ -51,7 +51,10 @@ func (node *Node) CheckPoint(msg *consensus.CheckPointMsg) {
 	msgsLog[msg.NodeID] = msg
 	node.CheckPointMutex.Unlock()
 
-	state, _ := node.getState(msg.SequenceID) // Must succeed.
+	state, err := node.getState(msg.SequenceID)
+	if err != nil {
+		return
+	}
 
 	// Checkpoint only once for each sequence number.
 	if node.Checkpointchk(state) && state.GetSuccChkPoint() != 1 {
