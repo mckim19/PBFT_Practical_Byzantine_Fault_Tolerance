@@ -34,6 +34,7 @@ type Node struct {
 
 	// Saved checkpoint messages on this node
 	// key: sequenceID, value: map(key: nodeID, value: checkpointMsg)
+	CheckPointMutex     sync.RWMutex
 	CheckPointMsgsLog   map[int64]map[string]*consensus.CheckPointMsg
 
 	// The stable checkpoint that 2f + 1 nodes agreed
@@ -437,8 +438,7 @@ func (node *Node) executeMsg() {
 					chkSequenceid := int64(sequenceid + periodCheckPoint)
 					ok := node.CheckPointMissCheck(sequenceid)
 					if ok {
-						SequenceID := node.States[chkSequenceid].GetReqMsg().SequenceID
-						checkPointMsg, _ := node.getCheckPointMsg(SequenceID, node.MyInfo.NodeID, node.States[chkSequenceid].GetReqMsg())
+						checkPointMsg := node.createCheckPointMsg(chkSequenceid, node.MyInfo.NodeID)
 						node.Broadcast(checkPointMsg, "/checkpoint")
 						node.CheckPoint(checkPointMsg)
 					}
