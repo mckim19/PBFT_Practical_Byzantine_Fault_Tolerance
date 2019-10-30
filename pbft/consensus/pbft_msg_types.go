@@ -51,7 +51,6 @@ type SetPm struct {
 	PrepareMsgs   map[string]*VoteMsg
 }
 
-
 type NewViewMsg struct {
 	NodeID     string `json:"nodeID"`
 	NextViewID int64  `json:"nextviewID"`

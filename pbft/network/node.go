@@ -162,11 +162,13 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	// the primary and use timeouts to detect when it stops.
 	// They trigger view changes to select a new primary when it
 	// appears that the current one has failed.
-	go node.startTransitionWithDeadline(state, reqMsg.Timestamp)
+	// 
+	// Deadline is determined by the timestamp of the current node.
+	go node.startTransitionWithDeadline(state, time.Now().UnixNano())
 }
 
 func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp int64) {
-	// Set deadline based on timestamp when the request message was created.
+	// Set deadline based on the given timestamp.
 	sec := timeStamp / int64(time.Second)
 	nsec := timeStamp % int64(time.Second)
 	d := time.Unix(sec, nsec).Add(ConsensusDeadline)
@@ -319,24 +321,41 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 	case *consensus.RequestMsg:
 		node.MsgDelivery <- msg
 	case *consensus.PrePrepareMsg:
-		// Receive pre-prepare message only if the node is not primary.
-		if !node.isMyNodePrimary() {
+		// Receive pre-prepare message only if 1. the node is not primary,
+		// and 2. stable checkpoint for this node is lower than
+		// sequence number of this message.
+		if !node.isMyNodePrimary() &&
+		   node.StableCheckPoint <= msg.SequenceID {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.VoteMsg:
 		// Messages are broadcasted from the node, so
 		// the message sent to itself can exist.
-		if node.MyInfo.NodeID != msg.NodeID {
+		// Skip the message if stable checkpoint for this node is
+		// lower than sequence number of this message.
+		if node.MyInfo.NodeID != msg.NodeID &&
+		   node.StableCheckPoint <= msg.SequenceID {
 			node.MsgDelivery <- msg
 		}
 	case *consensus.ReplyMsg:
 		node.MsgDelivery <- msg
+	}
+
+	// Messages are broadcasted from the node, so
+	// the message sent to itself can exist.
+	switch msg := msgEntered.(type) {
 	case *consensus.CheckPointMsg:
-		node.MsgDelivery <- msg
+		if node.MyInfo.NodeID != msg.NodeID {
+			node.MsgDelivery <- msg
+		}
 	case *consensus.ViewChangeMsg:
-		node.MsgDelivery <- msg
+		if node.MyInfo.NodeID != msg.NodeID {
+			node.MsgDelivery <- msg
+		}
 	case *consensus.NewViewMsg:
-		node.MsgDelivery <- msg
+		if node.MyInfo.NodeID != msg.NodeID {
+			node.MsgDelivery <- msg
+		}
 	}
 }
 

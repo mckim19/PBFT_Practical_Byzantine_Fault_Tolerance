@@ -48,7 +48,6 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 
 
 func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp map[int64]*SetPm, setc map[string]*CheckPointMsg) (*ViewChangeMsg, error) {
-
 	return &ViewChangeMsg{
 		NodeID: viewchangestate.NodeID,
 		NextViewID: viewchangestate.NextViewID,
@@ -63,20 +62,6 @@ func (viewchangestate *ViewChangeState) CreateViewChangeMsg(setp map[int64]*SetP
 
 func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg) (*NewViewMsg, error) {
 
-	//TODO: verify viewchangeMsg
-
-	//check received viewchangeMsg SetP
-	/*
-	for v, _ := range viewchangeMsg.SetP {
-		fmt.Println("    === > Preprepare : ", viewchangeMsg.SetP[v].PrePrepareMsg)
-		fmt.Println("    === > Prepare : ", viewchangeMsg.SetP[v].PrepareMsgs)
-	}
-
-	fmt.Println("**************a set of SetC******************")
-	for c, _ := range viewchangeMsg.SetC {
-		fmt.Println("    === > checkpoint : ", viewchangeMsg.SetC[c])
-	}
-	*/
 	// Append msg to its logs
 	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgMutex.Lock()
 	viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs[viewchangeMsg.NodeID] = viewchangeMsg
@@ -86,15 +71,26 @@ func (viewchangestate *ViewChangeState) ViewChange(viewchangeMsg *ViewChangeMsg)
 	// Print current voting status
 	fmt.Printf("[<<<<<<<<ViewChange-Vote>>>>>>>>>>]: %d\n", newTotalViewchangeMsg)
 
-	if int(newTotalViewchangeMsg) >= 2*viewchangestate.f+1 && viewchangestate.viewchanged() {
-			
+	var ismynodeprimary bool
+	ismynodeprimary = false
+
+	// Check this node is primary, when viewchangestate.viewchanged.
+	if viewchangestate.viewchanged() {
+		for nodeid, _ := range viewchangestate.ViewChangeMsgLogs.ViewChangeMsgs {
+			if nodeid == viewchangestate.NodeID {
+				ismynodeprimary = true
+			}
+		}
+	}
+
+	// Return NewViewMsg if viewchangestate.viewchanged and this node is a primary.
+	if ismynodeprimary {
 		return &NewViewMsg{
 			NextViewID: viewchangestate.NextViewID,
 			NodeID: viewchangestate.NodeID,
 			SetViewChangeMsgs: viewchangestate.GetViewChangeMsgs(),
 			SetPrePrepareMsgs: nil,
 		}, nil
-		
 	}
 
 	return nil, nil
