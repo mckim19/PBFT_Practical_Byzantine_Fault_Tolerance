@@ -103,17 +103,19 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 
 		// Search min_s the sequence number of the latest stable checkpoint and
 		// max_s the highest sequence number in a prepare message in V.
-		var min_s int64 
-		min_s = 0
-		var max_s int64
-		max_s = 0
+		var min_s int64 = 0
+		var max_s int64 = 0
 
 		fmt.Println("***********************N E W V I E W***************************")
 		for _, vcm := range newView.SetViewChangeMsgs {
 			if min_s < vcm.StableCheckPoint {
 				min_s = vcm.StableCheckPoint
 			}
-			for  _, prepareSet := range vcm.SetP {
+
+			for seq, prepareSet := range vcm.SetP {
+				if seq < max_s {
+					continue
+				}
 				for _, prepareMsg := range prepareSet.PrepareMsgs {
 					if max_s < prepareMsg.SequenceID {
 						max_s = prepareMsg.SequenceID
@@ -123,13 +125,28 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 		}
 
 		fmt.Println("min_s ", min_s, "max_s", max_s)
-		fmt.Println("newView")
 
+		// Create SetPrePrepareMsgs of the new-view for redo
+		// only if a preprepare message of the SetPrePrepareMsgs with sequence number seq is nil.
+		newMap := make(map[int64]*consensus.PrePrepareMsg)
+
+		for _, vcm := range newView.SetViewChangeMsgs {
+			for seq, setpm := range vcm.SetP {
+				if newMap[seq] == nil {
+					digest := setpm.PrePrepareMsg.Digest
+					newMap[seq] = GetPrePrepareForNewview(newView.NextViewID, seq, digest)
+				}
+			}
+		}
+		newView.SetPrePrepareMsgs = newMap
+
+		for i := int64(1); i < int64(len(newView.SetPrePrepareMsgs)); i++ {
+			fmt.Println("************************************************************************")
+			fmt.Println(newView.SetPrePrepareMsgs[i])
+		}
 		LogStage("NewView", false)
 		node.NewView(newView)
-
 	}
-
 	return nil
 }
 
@@ -159,4 +176,12 @@ func (node *Node) isMyNodePrimary() bool {
 func (node *Node) getPrimaryInfoByID(viewID int64) *NodeInfo {
 	viewIdx := viewID % int64(len(node.NodeTable))
 	return node.NodeTable[viewIdx]
+}
+
+func GetPrePrepareForNewview(nextviewID int64, sequenceid int64, digest string) *consensus.PrePrepareMsg {
+	return &consensus.PrePrepareMsg{
+		ViewID:     nextviewID,
+		SequenceID: sequenceid,
+		Digest:     digest,
+	}
 }
