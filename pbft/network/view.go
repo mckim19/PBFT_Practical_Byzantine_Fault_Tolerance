@@ -108,19 +108,15 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 		var max_s int64
 		max_s = 0
 
-		fmt.Println("**************N E W V I E W******************")
-		for nv, _ := range newView.SetViewChangeMsgs {
-
-			if min_s < newView.SetViewChangeMsgs[nv].StableCheckPoint {
-				min_s = newView.SetViewChangeMsgs[nv].StableCheckPoint 
+		fmt.Println("***********************N E W V I E W***************************")
+		for _, vcm := range newView.SetViewChangeMsgs {
+			if min_s < vcm.StableCheckPoint {
+				min_s = vcm.StableCheckPoint
 			}
-
-			for seq, _ := range newView.SetViewChangeMsgs[nv].SetP {
-
-				for nodeid, _ := range newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs {
-
-					if max_s < newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs[nodeid].SequenceID {
-						max_s = newView.SetViewChangeMsgs[nv].SetP[seq].PrepareMsgs[nodeid].SequenceID
+			for  _, prepareSet := range vcm.SetP {
+				for _, prepareMsg := range prepareSet.PrepareMsgs {
+					if max_s < prepareMsg.SequenceID {
+						max_s = prepareMsg.SequenceID
 					}
 				}
 			}
