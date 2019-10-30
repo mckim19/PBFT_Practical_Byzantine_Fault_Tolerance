@@ -68,6 +68,7 @@ func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) {
 	node.ViewChangeState = nil
 	
 	node.IsViewChanging = false
+	// TODO this node has to start redo
 }
 
 func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
@@ -153,6 +154,8 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) error {
 func (node *Node) GetNewView(msg *consensus.NewViewMsg) error{
 
 	fmt.Printf("<<<<<<<<<<<<<<<<NewView>>>>>>>>>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
+
+	// TODO this node has to start redo
 
 	//Change View and Primary
 	node.updateView(msg.NextViewID)
