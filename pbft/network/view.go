@@ -9,19 +9,19 @@ import (
 )
 
 func (node *Node) StartViewChange() {
-	var vcs *consensus.ViewChangeState
+	var vcs *consensus.VCState
 
 	// Start_ViewChange
 	LogStage("ViewChange", false)
 
 	// Create nextviewid.
 	var nextviewid = node.View.ID + 1
-	vcs = node.ViewChangeState
+	vcs = node.VCState
 	for vcs == nil {
 		vcs = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
-		// Assign new ViewChangeState if node did not create the state.
-		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.ViewChangeState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
-			vcs = node.ViewChangeState
+		// Assign new VCState if node did not create the state.
+		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.VCState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
+			vcs = node.VCState
 		}
 	}
 
@@ -59,20 +59,8 @@ func (node *Node) StartViewChange() {
 	node.GetViewChange(viewChangeMsg)
 }
 
-func (node *Node) NewView(newviewMsg *consensus.NewViewMsg) {
-	LogMsg(newviewMsg)
-
-	node.Broadcast(newviewMsg, "/newview")
-	LogStage("NewView", true)
-
-	node.ViewChangeState = nil
-	
-	node.IsViewChanging = false
-	// TODO this node has to start redo
-}
-
 func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
-	var vcs *consensus.ViewChangeState
+	var vcs *consensus.VCState
 
 	LogMsg(viewchangeMsg)
 
@@ -83,7 +71,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	}
 	nextviewid = viewchangeMsg.NextViewID
 
-	vcs = node.ViewChangeState
+	vcs = node.VCState
 	for vcs == nil {
 		// Ignore VIEW-CHANGE message if the next view id is not new.
 		nextviewid = node.View.ID + 1
@@ -94,13 +82,13 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 
 		// Create a view state for the next view id.
 		vcs = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
-		// Assign new ViewChangeState if node did not create the state.
-		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.ViewChangeState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
-			vcs = node.ViewChangeState
+		// Assign new VCState if node did not create the state.
+		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.VCState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
+			vcs = node.VCState
 		}
 	}
 
-	newView, err := vcs.ViewChange(viewchangeMsg)
+	newViewMsg, err := vcs.ViewChange(viewchangeMsg)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -110,20 +98,41 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	// view-change messages for view v + 1 from other replicas,
 	// it multicasts a NEW-VIEW message to all other replicas.
 	var nextPrimary = node.getPrimaryInfoByID(nextviewid)
-	if newView == nil || node.MyInfo != nextPrimary {
+	if newViewMsg == nil || node.MyInfo != nextPrimary {
 		return
 	}
 
 	// Change View and Primary.
-	node.updateView(newView.NextViewID)
+	node.updateView(newViewMsg.NextViewID)
 
+	// Fill all the fields of NEW-VIEW message.
+	node.fillNewViewMsg(newViewMsg)
+
+	for i := int64(1); i < int64(len(newViewMsg.SetPrePrepareMsgs)); i++ {
+		fmt.Println("************************************************************************")
+		fmt.Println(newViewMsg.SetPrePrepareMsgs[i])
+	}
+	LogStage("NewView", false)
+
+	LogMsg(newViewMsg)
+
+	node.Broadcast(newViewMsg, "/newview")
+	LogStage("NewView", true)
+
+	node.VCState = nil
+
+	node.IsViewChanging = false
+	// TODO this node has to start redo
+}
+
+func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
 	// Search min_s the sequence number of the latest stable checkpoint and
 	// max_s the highest sequence number in a prepare message in V.
 	var min_s int64 = 0
 	var max_s int64 = 0
 
 	fmt.Println("***********************N E W V I E W***************************")
-	for _, vcm := range newView.SetViewChangeMsgs {
+	for _, vcm := range newViewMsg.SetViewChangeMsgs {
 		if min_s < vcm.StableCheckPoint {
 			min_s = vcm.StableCheckPoint
 		}
@@ -146,22 +155,15 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	// only if a preprepare message of the SetPrePrepareMsgs with sequence number seq is nil.
 	newMap := make(map[int64]*consensus.PrePrepareMsg)
 
-	for _, vcm := range newView.SetViewChangeMsgs {
+	for _, vcm := range newViewMsg.SetViewChangeMsgs {
 		for seq, setpm := range vcm.SetP {
 			if newMap[seq] == nil {
 				digest := setpm.PrePrepareMsg.Digest
-				newMap[seq] = GetPrePrepareForNewview(newView.NextViewID, seq, digest)
+				newMap[seq] = GetPrePrepareForNewview(newViewMsg.NextViewID, seq, digest)
 			}
 		}
 	}
-	newView.SetPrePrepareMsgs = newMap
-
-	for i := int64(1); i < int64(len(newView.SetPrePrepareMsgs)); i++ {
-		fmt.Println("************************************************************************")
-		fmt.Println(newView.SetPrePrepareMsgs[i])
-	}
-	LogStage("NewView", false)
-	node.NewView(newView)
+	newViewMsg.SetPrePrepareMsgs = newMap
 }
 
 func (node *Node) GetNewView(msg *consensus.NewViewMsg) error{
@@ -173,7 +175,7 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error{
 	//Change View and Primary
 	node.updateView(msg.NextViewID)
 
-	node.ViewChangeState = nil
+	node.VCState = nil
 
 	node.IsViewChanging = false
 

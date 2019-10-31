@@ -18,7 +18,7 @@ type Node struct {
 	NodeTable       []*NodeInfo
 	View            *View
 	States          map[int64]consensus.PBFT // key: sequenceID, value: state
-	ViewChangeState *consensus.ViewChangeState
+	VCState *consensus.VCState
 	CommittedMsgs   []*consensus.RequestMsg // kinda block.
 	TotalConsensus  int64 // atomic. number of consensus started so far.
 	IsViewChanging  bool
@@ -91,7 +91,7 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64, decodePrivKe
 		// Consensus-related struct
 		States:          make(map[int64]consensus.PBFT),
 		CommittedMsgs:   make([]*consensus.RequestMsg, 0),
-		ViewChangeState: nil,
+		VCState: nil,
 
 		// Channels
 		MsgEntrance: make(chan interface{}, len(nodeTable) * 3),
