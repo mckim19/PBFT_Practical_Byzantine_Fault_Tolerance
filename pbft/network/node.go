@@ -9,10 +9,12 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"crypto/ecdsa"
 )
 
 type Node struct {
 	MyInfo          *NodeInfo
+	PrivKey         *ecdsa.PrivateKey
 	NodeTable       []*NodeInfo
 	View            *View
 	States          map[int64]consensus.PBFT // key: sequenceID, value: state
@@ -44,6 +46,7 @@ type Node struct {
 type NodeInfo struct {
 	NodeID string `json:"nodeID"`
 	Url    string `json:"url"`
+	PubKey *ecdsa.PublicKey
 }
 
 type View struct {
@@ -74,9 +77,10 @@ const CoolingTotalErrMsg = 5
 // Number of outbound connection for a node.
 const MaxOutboundConnection = 1000
 
-func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64) *Node {
+func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64, decodePrivKey *ecdsa.PrivateKey) *Node {
 	node := &Node{
 		MyInfo:    myInfo,
+		PrivKey: decodePrivKey,
 		NodeTable: nodeTable,
 		View:      &View{},
 		IsViewChanging: false,
@@ -471,7 +475,7 @@ func (node *Node) sendMsg() {
 
 			// Goroutine for concurrent broadcast()
 			go func() {
-				broadcast(errCh, msg.Path, msg.Msg)
+				broadcast(errCh, msg.Path, msg.Msg, node.PrivKey)
 			}()
 
 			select {

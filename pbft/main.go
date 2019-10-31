@@ -5,6 +5,10 @@ import (
 	"os"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"crypto/ecdsa"
+	"encoding/pem"
+	"crypto/x509"
 )
 
 // Hard-coded for test.
@@ -14,6 +18,25 @@ var nodeTableForTest = []*network.NodeInfo {
 	{NodeID: "MS",     Url: "localhost:1112"},
 	{NodeID: "Google", Url: "localhost:1113"},
 	{NodeID: "IBM",    Url: "localhost:1114"},
+}
+// PrivateKeyDecode
+func PrivateKeyDecode(pemEncoded string) *ecdsa.PrivateKey {
+
+	block, _ := pem.Decode([]byte(pemEncoded))
+	x509Encoded := block.Bytes
+	privateKey, _ := x509.ParseECPrivateKey(x509Encoded)
+
+	return privateKey
+}
+// PublicKeyDecode
+func PublicKeyDecode(pemEncodedPub string) *ecdsa.PublicKey {
+
+	blockPub, _ := pem.Decode([]byte(pemEncodedPub))
+	x509EncodedPub := blockPub.Bytes
+	genericPublicKey, _ := x509.ParsePKIXPublicKey(x509EncodedPub)
+	publicKey := genericPublicKey.(*ecdsa.PublicKey)
+
+	return publicKey
 }
 
 func main() {
@@ -44,8 +67,21 @@ func main() {
 			return
 		}
 	}
+	// Make PubKey && setting each for nodeID
+	for _, myinfo := range nodeTable {
 
-	server := network.NewServer(nodeID, nodeTable, viewID)
+		pubKeyFile := fmt.Sprintf("keys/%s.pub", myinfo.NodeID)
+		pubbytes, _ := ioutil.ReadFile(pubKeyFile)
+		decodePubKey := PublicKeyDecode(string(pubbytes))
+		myinfo.PubKey = decodePubKey
+
+	}
+	// Make NodeID PriveKey
+	privKeyFile := fmt.Sprintf("keys/%s.priv", nodeID)
+	privbytes, _ := ioutil.ReadFile(privKeyFile)
+	decodePrivKey := PrivateKeyDecode(string(privbytes))
+
+	server := network.NewServer(nodeID, nodeTable, viewID, decodePrivKey)
 
 	if server != nil {
 		server.Start()

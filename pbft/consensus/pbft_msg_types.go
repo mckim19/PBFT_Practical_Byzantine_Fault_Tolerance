@@ -1,5 +1,9 @@
 package consensus
 
+import (
+	"math/big"
+)
+
 // Messages are TOCS style.
 
 type RequestMsg struct {
@@ -32,6 +36,12 @@ type VoteMsg struct {
 	MsgType           `json:"msgType"`
 }
 
+type MsgType int
+const (
+	PrepareMsg MsgType = iota
+	CommitMsg
+)
+
 type CheckPointMsg struct {
 	SequenceID int64  `json:"sequenceID"`
 	Digest     string `json:"digest"`
@@ -61,8 +71,12 @@ type NewViewMsg struct {
 	// new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s
 }
 
-type MsgType int
-const (
-	PrepareMsg MsgType = iota
-	CommitMsg
-)
+type SignatureMsg struct {
+	// signature
+	Signature []byte `json:"signature"`
+	R *big.Int `json:"r"`
+	S *big.Int `json:"s"`
+
+	// any consensus messages
+	MarshalledMsg []byte `json:"marshalledmsg"`
+}
