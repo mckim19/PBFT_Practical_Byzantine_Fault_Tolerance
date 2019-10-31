@@ -131,8 +131,19 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 	fmt.Printf("<<<<<<<<<<<<<<<<NewView>>>>>>>>>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
 
 	// TODO this node has to start redo
+	// verify view number of new-view massage
+	if msg.NextViewID != node.View.ID + 1 {
+		return nil
+	}
 
-	//Change View and Primary
+	// verify vaild view-change massages of 2f + 1 including a valid view-change massages of a new primary
+
+	// 
+	for seq, vcm := range msg.SetPre {
+
+	}
+
+	// Change View and Primary
 	node.updateView(msg.NextViewID)
 
 	node.VCState = nil
