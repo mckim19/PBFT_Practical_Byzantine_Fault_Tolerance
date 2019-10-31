@@ -9,54 +9,20 @@ import (
 )
 
 func (node *Node) StartViewChange() {
-	var vcs *consensus.VCState
-
 	// Start_ViewChange
 	LogStage("ViewChange", false)
 
-	// Create nextviewid.
-	var nextviewid = node.View.ID + 1
-	vcs = node.VCState
-	for vcs == nil {
-		vcs = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
-		// Assign new VCState if node did not create the state.
-		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.VCState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
-			vcs = node.VCState
-		}
-	}
-
-	// a set of PreprepareMsg and PrepareMsgs for veiwchange.
-	setp := make(map[int64]*consensus.SetPm)
-	setc := make(map[string]*consensus.CheckPointMsg)
-	
-	node.StatesMutex.RLock()
-	for seqID, state := range node.States {
-		var setPm consensus.SetPm
-		setPm.PrePrepareMsg = state.GetPrePrepareMsg()
-		setPm.PrepareMsgs = state.GetPrepareMsgs()
-		setp[seqID] = &setPm
-	}
-	
-	fmt.Println("node.StableCheckPoint : ", node.StableCheckPoint)
-	setc = node.CheckPointMsgsLog[node.StableCheckPoint]
-	fmt.Println("setc",setc)
-
-
-	node.StatesMutex.RUnlock()
+	// Create SetP.
+	setp := node.CreateSetP()
 
 	// Create ViewChangeMsg.
-	viewChangeMsg, err := vcs.CreateViewChangeMsg(setp, setc)
+	viewChangeMsg := node.CreateViewChangeMsg(setp)
 
-	if err != nil {
-		node.MsgError <- []error{err}
-		return
-	}
-
+	// VIEW-CHANGE message created by this node will be received
+	// at this node as well as the other nodes.
 	node.Broadcast(viewChangeMsg, "/viewchange")
 	fmt.Println("Breadcast viewchange")
 	LogStage("ViewChange", true)
-
-	node.GetViewChange(viewChangeMsg)
 }
 
 func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
@@ -68,19 +34,14 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	var nextviewid = node.View.ID + 1
 	if nextviewid > viewchangeMsg.NextViewID {
 		return
+	} else if nextviewid != viewchangeMsg.NextViewID {
+		fmt.Println("Future view message received!!!!")
+		return
 	}
-	nextviewid = viewchangeMsg.NextViewID
 
 	vcs = node.VCState
+	// Create a view state if it does not exist.
 	for vcs == nil {
-		// Ignore VIEW-CHANGE message if the next view id is not new.
-		nextviewid = node.View.ID + 1
-		if nextviewid > viewchangeMsg.NextViewID {
-			return
-		}
-		nextviewid = viewchangeMsg.NextViewID
-
-		// Create a view state for the next view id.
 		vcs = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
 		// Assign new VCState if node did not create the state.
 		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.VCState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
@@ -166,8 +127,7 @@ func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
 	newViewMsg.SetPrePrepareMsgs = newMap
 }
 
-func (node *Node) GetNewView(msg *consensus.NewViewMsg) error{
-
+func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 	fmt.Printf("<<<<<<<<<<<<<<<<NewView>>>>>>>>>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
 
 	// TODO this node has to start redo
@@ -201,5 +161,38 @@ func GetPrePrepareForNewview(nextviewID int64, sequenceid int64, digest string) 
 		ViewID:     nextviewID,
 		SequenceID: sequenceid,
 		Digest:     digest,
+	}
+}
+
+// Create a set of PreprepareMsg and PrepareMsgs for each sequence number.
+func (node *Node) CreateSetP() map[int64]*consensus.SetPm {
+	setp := make(map[int64]*consensus.SetPm)
+
+	node.StatesMutex.RLock()
+	for seqID, state := range node.States {
+		var setPm consensus.SetPm
+		setPm.PrePrepareMsg = state.GetPrePrepareMsg()
+		setPm.PrepareMsgs = state.GetPrepareMsgs()
+		setp[seqID] = &setPm
+	}
+	node.StatesMutex.RUnlock()
+
+	return setp
+}
+
+func (node *Node) CreateViewChangeMsg(setp map[int64]*consensus.SetPm) *consensus.ViewChangeMsg {
+	// Get checkpoint message log for the latest stable checkpoint (C)
+	// for this node.
+	stableCheckPoint := node.StableCheckPoint
+	setc := node.CheckPointMsgsLog[stableCheckPoint]
+	fmt.Println("node.StableCheckPoint : ", stableCheckPoint)
+	fmt.Println("setc",setc)
+
+	return &consensus.ViewChangeMsg{
+		NodeID: node.MyInfo.NodeID,
+		NextViewID: node.View.ID + 1,
+		StableCheckPoint: stableCheckPoint,
+		SetC: setc,
+		SetP: setp,
 	}
 }

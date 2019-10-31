@@ -46,18 +46,6 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 	}
 }
 
-func (vcs *VCState) CreateViewChangeMsg(setp map[int64]*SetPm, setc map[string]*CheckPointMsg) (*ViewChangeMsg, error) {
-	return &ViewChangeMsg{
-		NodeID: vcs.NodeID,
-		NextViewID: vcs.NextViewID,
-		StableCheckPoint: vcs.StableCheckPoint,
-		SetC: setc,
-		SetP: setp,
-	}, nil
-
-	return nil, nil
-}
-
 func (vcs *VCState) ViewChange(viewchangeMsg *ViewChangeMsg) (*NewViewMsg, error) {
 	// TODO: verify VIEW-CHANGE message.
 
