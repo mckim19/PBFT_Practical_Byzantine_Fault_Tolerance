@@ -393,7 +393,7 @@ func (node *Node) resolveMsg() {
 		case *consensus.CheckPointMsg:
 			node.GetCheckPoint(msg)
 		case *consensus.ViewChangeMsg:
-			err = node.GetViewChange(msg)
+			node.GetViewChange(msg)
 		case *consensus.NewViewMsg:
 			err = node.GetNewView(msg)
 		}
