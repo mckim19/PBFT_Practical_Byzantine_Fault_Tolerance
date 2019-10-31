@@ -31,7 +31,11 @@ do
 	PRIVKEYFILE="$KEYPATH/Node$i.priv"
 	PUBKEYFILE="$KEYPATH/Node$i.pub"
 
-	(openssl ecparam -name secp384r1 -genkey -noout -out $PRIVKEYFILE
+	(
+	 # NIST says secp224r1 is as strong as rsa-2048.
+	 # Refer to Table 2-1 from:
+	 # https://dx.doi.org/10.6028/NIST.SP.800-57pt3r1
+	 openssl ecparam -name secp224r1 -genkey -noout -out $PRIVKEYFILE
 	 openssl ec -in $PRIVKEYFILE -pubout -out $PUBKEYFILE
 	) &
 done

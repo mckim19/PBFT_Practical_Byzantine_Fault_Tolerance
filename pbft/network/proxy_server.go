@@ -130,7 +130,6 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 			log.Println("read:", err)
 			return
 		}
-		//log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
 
 		var marshalledMsg []byte
 		var ok bool
@@ -276,7 +275,7 @@ func broadcast(errCh chan<- error, url string, msg []byte, privKey *ecdsa.Privat
 func attachSignatureMsg(msg []byte, privKey *ecdsa.PrivateKey) []byte{
 	var sigMgs consensus.SignatureMsg
 	// msg signature
-	r, s, signature, err := consensus.Signature(privKey, string(msg))
+	r, s, signature, err := consensus.Sign(privKey, msg)
 	if err == nil {
 		// setting SignatureMsg
 		sigMgs = consensus.SignatureMsg {
@@ -299,9 +298,10 @@ func deattachSignatureMsg(msg []byte, pubkey *ecdsa.PublicKey) ([]byte, error, b
 		return nil, err, false
 	}
 	// msg VerifySignature
-	ok := consensus.VerifySignature(*pubkey, sigMgs.R, sigMgs.S, string(sigMgs.MarshalledMsg))
+	ok := consensus.Verify(pubkey, sigMgs.R, sigMgs.S, sigMgs.MarshalledMsg)
 	return sigMgs.MarshalledMsg, nil, ok
 }
+
 func dummyMsg(operation string, clientID string, data []byte) []byte {
 	var msg consensus.RequestMsg
 	msg.Operation = operation
