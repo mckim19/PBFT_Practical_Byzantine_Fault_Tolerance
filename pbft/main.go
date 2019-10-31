@@ -9,6 +9,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/pem"
 	"crypto/x509"
+	"log"
 )
 
 // Hard-coded for test.
@@ -19,19 +20,17 @@ var nodeTableForTest = []*network.NodeInfo {
 	{NodeID: "Google", Url: "localhost:1113"},
 	{NodeID: "IBM",    Url: "localhost:1114"},
 }
-// PrivateKeyDecode
-func PrivateKeyDecode(pemEncoded string) *ecdsa.PrivateKey {
 
-	block, _ := pem.Decode([]byte(pemEncoded))
-	x509Encoded := block.Bytes
+func PrivateKeyDecode(pemEncoded []byte) *ecdsa.PrivateKey {
+	blockPriv, _ := pem.Decode(pemEncoded)
+	x509Encoded := blockPriv.Bytes
 	privateKey, _ := x509.ParseECPrivateKey(x509Encoded)
 
 	return privateKey
 }
-// PublicKeyDecode
-func PublicKeyDecode(pemEncodedPub string) *ecdsa.PublicKey {
 
-	blockPub, _ := pem.Decode([]byte(pemEncodedPub))
+func PublicKeyDecode(pemEncoded []byte) *ecdsa.PublicKey {
+	blockPub, _ := pem.Decode(pemEncoded)
 	x509EncodedPub := blockPub.Bytes
 	genericPublicKey, _ := x509.ParsePKIXPublicKey(x509EncodedPub)
 	publicKey := genericPublicKey.(*ecdsa.PublicKey)
@@ -55,35 +54,41 @@ func main() {
 	} else {
 		nodeListFile := os.Args[2]
 		jsonFile, err := os.Open(nodeListFile)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		AssertError(err)
 		defer jsonFile.Close()
 
 		err = json.NewDecoder(jsonFile).Decode(&nodeTable)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		AssertError(err)
 	}
-	// Make PubKey && setting each for nodeID
-	for _, myinfo := range nodeTable {
 
-		pubKeyFile := fmt.Sprintf("keys/%s.pub", myinfo.NodeID)
-		pubbytes, _ := ioutil.ReadFile(pubKeyFile)
-		decodePubKey := PublicKeyDecode(string(pubbytes))
-		myinfo.PubKey = decodePubKey
+	// Load public key for each node.
+	for _, nodeInfo := range nodeTable {
+		pubKeyFile := fmt.Sprintf("keys/%s.pub", nodeInfo.NodeID)
+		pubBytes, err := ioutil.ReadFile(pubKeyFile)
+		AssertError(err)
 
+		decodePubKey := PublicKeyDecode(pubBytes)
+		nodeInfo.PubKey = decodePubKey
 	}
+
 	// Make NodeID PriveKey
 	privKeyFile := fmt.Sprintf("keys/%s.priv", nodeID)
-	privbytes, _ := ioutil.ReadFile(privKeyFile)
-	decodePrivKey := PrivateKeyDecode(string(privbytes))
+	privbytes, err := ioutil.ReadFile(privKeyFile)
+	AssertError(err)
+	decodePrivKey := PrivateKeyDecode(privbytes)
 
 	server := network.NewServer(nodeID, nodeTable, viewID, decodePrivKey)
 
 	if server != nil {
 		server.Start()
 	}
+}
+
+func AssertError(err error) {
+	if err == nil {
+		return
+	}
+
+	log.Println(err)
+	os.Exit(1)
 }

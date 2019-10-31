@@ -65,6 +65,9 @@ type MsgOut struct {
 	Msg  []byte
 }
 
+// Number of parallel goroutines for resolving messages.
+const NumResolveMsgGo = 6
+
 // Deadline for the consensus state.
 const ConsensusDeadline = time.Millisecond * 100
 
@@ -108,7 +111,7 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64, decodePrivKe
 	// Start message dispatcher
 	go node.dispatchMsg()
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < NumResolveMsgGo; i++ {
 		// Start message resolver
 		go node.resolveMsg()
 	}
