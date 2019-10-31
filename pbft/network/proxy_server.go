@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"log"
 	"time"
+	"crypto/ecdsa"
 )
 
 type Server struct {
@@ -18,7 +19,7 @@ type Server struct {
 	node *Node
 }
 
-func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
+func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64, decodePrivKey *ecdsa.PrivateKey) *Server {
 	nodeIdx := int(-1)
 	for idx, nodeInfo := range nodeTable {
 		if nodeInfo.NodeID == nodeID {
@@ -32,7 +33,7 @@ func NewServer(nodeID string, nodeTable []*NodeInfo, viewID int64) *Server {
 		return nil
 	}
 
-	node := NewNode(nodeTable[nodeIdx], nodeTable, viewID)
+	node := NewNode(nodeTable[nodeIdx], nodeTable, viewID, decodePrivKey)
 	server := &Server{nodeTable[nodeIdx].Url, node}
 
 	// Normal case.
@@ -131,71 +132,77 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 		}
 		//log.Printf("%s recv: %s", server.node.NodeID, consensus.Hash(message))
 
+		var marshalledMsg []byte
+		var ok bool
 		switch path {
 		case "/req":
 			var msg consensus.RequestMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.MsgEntrance <- &msg
 		case "/preprepare":
 			var msg consensus.PrePrepareMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.MsgEntrance <- &msg
 		case "/prepare":
 			var msg consensus.VoteMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.MsgEntrance <- &msg
 		case "/commit":
 			var msg consensus.VoteMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.MsgEntrance <- &msg
 		case "/reply":
 			var msg consensus.ReplyMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.MsgEntrance <- &msg
 		case "/checkpoint":
 			var msg consensus.CheckPointMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.MsgEntrance <- &msg
 		case "/viewchange":
 			var msg consensus.ViewChangeMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.ViewMsgEntrance <- &msg
 		case "/newview":
 			var msg consensus.NewViewMsg
-			err = json.Unmarshal(message, &msg)
-			if err != nil {
-				log.Println(err)
-				continue
+			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
+			if err != nil || ok == false {
+				break
 			}
+			_ = json.Unmarshal(marshalledMsg, &msg)
 			server.node.ViewMsgEntrance <- &msg
+		}
+
+		if err != nil {
+			log.Println(err)
 		}
 	}
 }
@@ -238,7 +245,7 @@ func (server *Server) sendDummyMsg() {
 			// Broadcast the dummy message.
 			errCh := make(chan error, 1)
 			log.Printf("Broadcasting dummy message from %s", u)
-			broadcast(errCh, u, dummy)
+			broadcast(errCh, u, dummy, server.node.PrivKey)
 			err := <-errCh
 			if err != nil {
 				log.Println(err)
@@ -247,7 +254,8 @@ func (server *Server) sendDummyMsg() {
 	}
 }
 
-func broadcast(errCh chan<- error, url string, msg []byte) {
+func broadcast(errCh chan<- error, url string, msg []byte, privKey *ecdsa.PrivateKey) {
+	sigMgsBytes := attachSignatureMsg(msg, privKey)
 	url = "ws://" + url // Fix using url.URL{}
 	c, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -255,7 +263,7 @@ func broadcast(errCh chan<- error, url string, msg []byte) {
 		return
 	}
 
-	err = c.WriteMessage(websocket.TextMessage, msg)
+	err = c.WriteMessage(websocket.TextMessage, sigMgsBytes)
 	if err != nil {
 		errCh <- err
 		return
@@ -265,6 +273,35 @@ func broadcast(errCh chan<- error, url string, msg []byte) {
 	errCh <- nil
 }
 
+func attachSignatureMsg(msg []byte, privKey *ecdsa.PrivateKey) []byte{
+	var sigMgs consensus.SignatureMsg
+	// msg signature
+	r, s, signature, err := consensus.Signature(privKey, string(msg))
+	if err == nil {
+		// setting SignatureMsg
+		sigMgs = consensus.SignatureMsg {
+			Signature: signature,
+			R: r,
+			S: s,
+			MarshalledMsg: msg,
+		}
+	}
+	sigMgsBytes, _ := json.Marshal(sigMgs)
+
+	return sigMgsBytes
+}
+
+func deattachSignatureMsg(msg []byte, pubkey *ecdsa.PublicKey) ([]byte, error, bool) {
+	var sigMgs consensus.SignatureMsg
+	// unmarshal sigmsgs
+	err := json.Unmarshal(msg, &sigMgs)
+	if err != nil {
+		return nil, err, false
+	}
+	// msg VerifySignature
+	ok := consensus.VerifySignature(*pubkey, sigMgs.R, sigMgs.S, string(sigMgs.MarshalledMsg))
+	return sigMgs.MarshalledMsg, nil, ok
+}
 func dummyMsg(operation string, clientID string, data []byte) []byte {
 	var msg consensus.RequestMsg
 	msg.Operation = operation
