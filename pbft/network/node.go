@@ -420,7 +420,7 @@ func (node *Node) executeMsg() {
 
 		// if msg with sequence number n is already executed, skip to send a reply of the msg with n
 		var isExecuted bool = false
-		for idx, cmsg := range node.CommittedMsgs {
+		for _, cmsg := range node.CommittedMsgs {
 			if cmsg.SequenceID == msgPair.committedMsg.SequenceID {
 				isExecuted = true
 		break

@@ -139,9 +139,9 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 	// verify vaild view-change massages of 2f + 1 including a valid view-change massages of a new primary
 
 	// 
-	for seq, vcm := range msg.SetPre {
+	//for seq, vcm := range msg.SetPre {
 
-	}
+	//}
 
 	// Change View and Primary
 	node.updateView(msg.NextViewID)
