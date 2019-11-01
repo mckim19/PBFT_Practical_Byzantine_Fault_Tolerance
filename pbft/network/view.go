@@ -29,23 +29,23 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	var vcs *consensus.VCState
 
 	LogMsg(viewchangeMsg)
+	fmt.Printf("++++ viewchangeMsg.NextViewID %d ++++++++++++++++++++ \n", viewchangeMsg.NextViewID)
 
 	// Ignore VIEW-CHANGE message if the next view id is not new.
 	var nextviewid = node.View.ID + 1
-	if nextviewid > viewchangeMsg.NextViewID {
-		return
-	} else if nextviewid != viewchangeMsg.NextViewID {
-		fmt.Println("Future view message received!!!!")
-		return
-	}
 
-	vcs = node.VCState
+	vcs = node.VCStates[viewchangeMsg.NextViewID]
 	// Create a view state if it does not exist.
 	for vcs == nil {
 		vcs = consensus.CreateViewChangeState(node.MyInfo.NodeID, len(node.NodeTable), nextviewid, node.StableCheckPoint)
+		// Register state into node
+		node.VCStatesMutex.Lock()
+		node.VCStates[viewchangeMsg.NextViewID] = vcs
+		node.VCStatesMutex.Unlock()
+
 		// Assign new VCState if node did not create the state.
-		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&node.VCState)), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
-			vcs = node.VCState
+		if !atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(node.VCStates[viewchangeMsg.NextViewID])), unsafe.Pointer(nil), unsafe.Pointer(vcs)) {
+			vcs = node.VCStates[viewchangeMsg.NextViewID]
 		}
 	}
 
@@ -80,10 +80,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	node.Broadcast(newViewMsg, "/newview")
 	LogStage("NewView", true)
 
-	node.VCState = nil
-
 	node.IsViewChanging = false
-	// TODO this node has to start redo
 }
 
 func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
@@ -127,12 +124,25 @@ func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
 	newViewMsg.SetPrePrepareMsgs = newMap
 }
 
-func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
-	fmt.Printf("<<<<<<<<<<<<<<<<NewView>>>>>>>>>>>>>>>>: %d by %s\n", msg.NextViewID, msg.NodeID)
+func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
+
+	// TODO verify new-view message
+
+	// Register new-view message into this node
+	node.VCStatesMutex.Lock()
+	node.VCStates[newviewMsg.NextViewID].NewViewMsg = newviewMsg
+	node.VCStatesMutex.Unlock()
+
+	fmt.Printf("<<<<<<<<<<<<<<<<NewView>>>>>>>>>>>>>>>>: %d by %s\n", newviewMsg.NextViewID, newviewMsg.NodeID)
+	// preprepare message, prepare messages and commit message with sequence number n from min_s to max_s
+	// have to remove before redoing
+	// TODO Remove messages for redo
 
 	// TODO this node has to start redo
+
+
 	// verify view number of new-view massage
-	if msg.NextViewID != node.View.ID + 1 {
+	if newviewMsg.NextViewID != node.View.ID + 1 {
 		return nil
 	}
 
@@ -144,9 +154,7 @@ func (node *Node) GetNewView(msg *consensus.NewViewMsg) error {
 	//}
 
 	// Change View and Primary
-	node.updateView(msg.NextViewID)
-
-	node.VCState = nil
+	node.updateView(newviewMsg.NextViewID)
 
 	node.IsViewChanging = false
 

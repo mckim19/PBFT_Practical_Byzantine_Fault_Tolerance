@@ -18,7 +18,7 @@ type Node struct {
 	NodeTable       []*NodeInfo
 	View            *View
 	States          map[int64]consensus.PBFT // key: sequenceID, value: state
-	VCState *consensus.VCState
+	VCStates		map[int64]*consensus.VCState
 	CommittedMsgs   []*consensus.RequestMsg // kinda block.
 	TotalConsensus  int64 // atomic. number of consensus started so far.
 	IsViewChanging  bool
@@ -33,6 +33,7 @@ type Node struct {
 
 	// Mutexes for preventing from concurrent access
 	StatesMutex sync.RWMutex
+	VCStatesMutex sync.RWMutex
 
 	// Saved checkpoint messages on this node
 	// key: sequenceID, value: map(key: nodeID, value: checkpointMsg)
@@ -69,7 +70,7 @@ type MsgOut struct {
 const NumResolveMsgGo = 6
 
 // Deadline for the consensus state.
-const ConsensusDeadline = time.Millisecond * 100
+const ConsensusDeadline = time.Millisecond * 50
 
 // Cooling time to escape frequent error, or message sending retry.
 const CoolingTime = time.Millisecond * 2
@@ -91,7 +92,7 @@ func NewNode(myInfo *NodeInfo, nodeTable []*NodeInfo, viewID int64, decodePrivKe
 		// Consensus-related struct
 		States:          make(map[int64]consensus.PBFT),
 		CommittedMsgs:   make([]*consensus.RequestMsg, 0),
-		VCState: nil,
+		VCStates: 		 make(map[int64]*consensus.VCState),
 
 		// Channels
 		MsgEntrance: make(chan interface{}, len(nodeTable) * 3),
@@ -219,7 +220,6 @@ func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp in
 			if msgTotalCnt == 0 ||
 			   lastCommittedMsg.SequenceID < state.GetSequenceID() {
 				//startviewchange
-				fmt.Println("IsViewchanging = true")
 				node.IsViewChanging = true
 				// Broadcast view change message.
 				node.MsgError <- []error{ctx.Err()}
@@ -348,16 +348,13 @@ func (node *Node) routeMsg(msgEntered interface{}) {
 		node.MsgDelivery <- msg
 	case *consensus.ViewChangeMsg:
 		node.MsgDelivery <- msg
+	case *consensus.NewViewMsg:
+		node.MsgDelivery <- msg
 	}
-
 	// Messages are broadcasted from the node, so
 	// the message sent to itself can exist.
 	switch msg := msgEntered.(type) {
 	case *consensus.CheckPointMsg:
-		if node.MyInfo.NodeID != msg.NodeID {
-			node.MsgDelivery <- msg
-		}
-	case *consensus.NewViewMsg:
 		if node.MyInfo.NodeID != msg.NodeID {
 			node.MsgDelivery <- msg
 		}

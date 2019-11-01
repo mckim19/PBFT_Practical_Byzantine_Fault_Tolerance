@@ -3,16 +3,18 @@
 package consensus
 
 import(
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 )
 
 type VCState struct {
-	NextViewID         int64
+	NextViewID         	int64
 	ViewChangeMsgLogs   *ViewChangeMsgLogs
-	NodeID		   string
-	StableCheckPoint int64
+	NewViewMsg			*NewViewMsg
+	NodeID		   		string
+	StableCheckPoint 	int64
 
 	// f: the number of Byzantine faulty nodes
 	// f = (n-1) / 3
@@ -39,7 +41,8 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 			TotalViewChangeMsg: 0,
 			msgSent: 0,
 		},
-		NodeID : nodeID,
+		NewViewMsg: nil,
+		NodeID: nodeID,
 		StableCheckPoint: stablecheckpoint,
 
 		f: (totNodes - 1) / 3,
@@ -47,7 +50,10 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 }
 
 func (vcs *VCState) ViewChange(viewchangeMsg *ViewChangeMsg) (*NewViewMsg, error) {
-	// TODO: verify VIEW-CHANGE message.
+	// verify VIEW-CHANGE message.
+	if err := vcs.verifyVCMsg(viewchangeMsg.NodeID, viewchangeMsg.NextViewID, viewchangeMsg.StableCheckPoint); err != nil {
+		return nil, errors.New("view-change message is corrupted: " + err.Error() + " (nextviewID " + fmt.Sprintf("%d", viewchangeMsg.NextViewID) + ")")
+	}
 
 	// Append VIEW-CHANGE message to its logs.
 	vcs.ViewChangeMsgLogs.ViewChangeMsgMutex.Lock()
@@ -88,4 +94,22 @@ func (vcs *VCState) GetViewChangeMsgs() map[string]*ViewChangeMsg {
 	vcs.ViewChangeMsgLogs.ViewChangeMsgMutex.RUnlock()
 
 	return newMap
+}
+
+func (vcs *VCState) verifyVCMsg(nodeID string, nextViewID int64, stableCheckPoint int64) error {
+	// Wrong view. That is, wrong configurations of peers to start the consensus.
+	if vcs.NodeID != nodeID {
+		return fmt.Errorf("vcs.NodeID = %d, nodeId = %d", vcs.NodeID, nodeID)
+	}
+
+	if vcs.NextViewID != nextViewID {
+		return fmt.Errorf("vcs.NextViewID = %d, nextViewID = %d", vcs.NextViewID, nextViewID)
+	}
+
+	// Check digest.
+	if vcs.StableCheckPoint != stableCheckPoint {
+		return fmt.Errorf("vcs.StableCheckPoint = %s, stableCheckPoint = %s", vcs.StableCheckPoint, stableCheckPoint)
+	}
+
+	return nil
 }
