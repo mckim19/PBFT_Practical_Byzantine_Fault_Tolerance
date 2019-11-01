@@ -19,4 +19,6 @@ type PBFT interface {
 	GetCommitMsgs() map[string]*VoteMsg
 	GetSuccChkPoint() int64
 	SetSuccChkPoint(int64)
+
+	ClearMsgLogs()
 }

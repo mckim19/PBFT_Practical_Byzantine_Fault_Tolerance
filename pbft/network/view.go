@@ -137,10 +137,18 @@ func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
 	// preprepare message, prepare messages and commit message with sequence number n from min_s to max_s
 	// have to remove before redoing
 	// TODO Remove messages for redo
-
 	// TODO this node has to start redo
+	/*
+	for seq, prePrepareMsg := range newViewMsg.SetPrePrepareMsgs {
+		node.StatesMutex.Lock()
+		var state consensus.PBFT
+		state, err := node.getState(prePrepareMsg.SequenceID)
+		state.ClearMsgLogs()
 
 
+		node.StatesMutex.Unlock()
+	}
+	*/
 	// verify view number of new-view massage
 	if newviewMsg.NextViewID != node.View.ID + 1 {
 		return nil

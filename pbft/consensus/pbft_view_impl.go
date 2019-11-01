@@ -113,3 +113,17 @@ func (vcs *VCState) verifyVCMsg(nodeID string, nextViewID int64, stableCheckPoin
 
 	return nil
 }
+
+func (state *State) ClearMsgLogs(min_s int64, max_s int64) {
+	// intialize anything of MsgLogs but request and reply
+	state.MsgLogs.PrePrepareMsg = nil
+	for _, prepareMsg range state.MsgLogs.PrepareMsgs {
+		prepareMsg = nil
+	}
+	for _, commitMsg range state.MsgLogs.CommitMsgs {
+		commitMsg = nil
+	}
+	state.MsgLogs.TotalPrepareMsg = 0
+	state.MsgLogs.TotalCommitMsg = 0
+	state.MsgLogs.commitMsgSent = 0
+}
