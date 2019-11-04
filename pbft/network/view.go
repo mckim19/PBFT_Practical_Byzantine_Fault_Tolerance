@@ -3,7 +3,7 @@ package network
 import (
 	"github.com/bigpicturelabs/consensusPBFT/pbft/consensus"
 	"fmt"
-
+	//"time"
 	"sync/atomic"
 	"unsafe"
 )
@@ -67,9 +67,9 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	node.updateView(newViewMsg.NextViewID)
 
 	// Fill all the fields of NEW-VIEW message.
-	node.fillNewViewMsg(newViewMsg)
+	var max_s int64 = node.fillNewViewMsg(newViewMsg)
 
-	for i := int64(1); i < int64(len(newViewMsg.SetPrePrepareMsgs)); i++ {
+	for i := node.StableCheckPoint + 1; i <= max_s; i++ {
 		fmt.Println("************************************************************************")
 		fmt.Println(newViewMsg.SetPrePrepareMsgs[i])
 	}
@@ -80,10 +80,9 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	node.Broadcast(newViewMsg, "/newview")
 	LogStage("NewView", true)
 
-	node.IsViewChanging = false
 }
 
-func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
+func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) int64 {
 	// Search min_s the sequence number of the latest stable checkpoint and
 	// max_s the highest sequence number in a prepare message in V.
 	var min_s int64 = 0
@@ -115,6 +114,9 @@ func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
 
 	for _, vcm := range newViewMsg.SetViewChangeMsgs {
 		for seq, setpm := range vcm.SetP {
+			if seq <= min_s{
+				continue
+			}
 			if newMap[seq] == nil {
 				digest := setpm.PrePrepareMsg.Digest
 				newMap[seq] = GetPrePrepareForNewview(newViewMsg.NextViewID, seq, digest)
@@ -122,6 +124,8 @@ func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) {
 		}
 	}
 	newViewMsg.SetPrePrepareMsgs = newMap
+
+	return max_s
 }
 
 func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
@@ -134,37 +138,52 @@ func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
 	node.VCStatesMutex.Unlock()
 
 	fmt.Printf("<<<<<<<<<<<<<<<<NewView>>>>>>>>>>>>>>>>: %d by %s\n", newviewMsg.NextViewID, newviewMsg.NodeID)
-	// preprepare message, prepare messages and commit message with sequence number n from min_s to max_s
-	// have to remove before redoing
-	// TODO Remove messages for redo
-	// TODO this node has to start redo
-	/*
-	for seq, prePrepareMsg := range newViewMsg.SetPrePrepareMsgs {
-		node.StatesMutex.Lock()
-		var state consensus.PBFT
-		state, err := node.getState(prePrepareMsg.SequenceID)
-		state.ClearMsgLogs()
-
-
-		node.StatesMutex.Unlock()
-	}
-	*/
-	// verify view number of new-view massage
-	if newviewMsg.NextViewID != node.View.ID + 1 {
-		return nil
-	}
-
-	// verify vaild view-change massages of 2f + 1 including a valid view-change massages of a new primary
-
-	// 
-	//for seq, vcm := range msg.SetPre {
-
-	//}
 
 	// Change View and Primary
 	node.updateView(newviewMsg.NextViewID)
 
+	// Accept messages usign MsgEntrance channel
 	node.IsViewChanging = false
+
+/*
+	// preprepare message, prepare messages and commit message with sequence number n from min_s to max_s
+	// have to remove before redoing
+	// TODO Remove a PrePrepare, Prepare and Commit messages of the state for redo
+	// TODO this node has to start redo
+	for _, prePrepareMsg := range newviewMsg.SetPrePrepareMsgs {
+		node.StatesMutex.Lock()
+		var state consensus.PBFT
+		state, err := node.getState(prePrepareMsg.SequenceID)
+		if err != nil {
+			// Print error.
+			node.MsgError <- []error{err}
+		}
+
+		if state != nil {
+			state.ClearMsgLogs()
+		} else { //if this node does not have a request with sequence number n (prePrepareMsg.SequenceID)
+			state := node.createState(0) // this node need to create state for redo
+
+			state.SetSequenceID(prePrepareMsg.SequenceID)
+
+			// Log REQUEST message.
+			state.SetReqMsg(nil)
+			state.SetDigest(prePrepareMsg.Digest)
+			state.SetPrePrepareMsg(prePrepareMsg)
+		}
+
+		node.States[prePrepareMsg.SequenceID] = state
+		node.StatesMutex.Unlock()
+
+		go node.startTransitionWithDeadline(state, time.Now().UnixNano())
+
+		node.GetPrePrepare(state, prePrepareMsg)
+	}
+*/
+	// verify view number of new-view massage
+	if newviewMsg.NextViewID != node.View.ID + 1 {
+		return nil
+	}
 
 	return nil
 }

@@ -3,7 +3,6 @@
 package consensus
 
 import(
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -51,9 +50,10 @@ func CreateViewChangeState(nodeID string, totNodes int, nextviewID int64, stable
 
 func (vcs *VCState) ViewChange(viewchangeMsg *ViewChangeMsg) (*NewViewMsg, error) {
 	// verify VIEW-CHANGE message.
-	if err := vcs.verifyVCMsg(viewchangeMsg.NodeID, viewchangeMsg.NextViewID, viewchangeMsg.StableCheckPoint); err != nil {
-		return nil, errors.New("view-change message is corrupted: " + err.Error() + " (nextviewID " + fmt.Sprintf("%d", viewchangeMsg.NextViewID) + ")")
-	}
+	// TODO verity sender's signature
+	//if err := vcs.verifyVCMsg(viewchangeMsg.NodeID, viewchangeMsg.NextViewID, viewchangeMsg.StableCheckPoint); err != nil {
+	//	return nil, errors.New("view-change message is corrupted: " + err.Error() + " (nextviewID " + fmt.Sprintf("%d", viewchangeMsg.NextViewID) + ")")
+	//}
 
 	// Append VIEW-CHANGE message to its logs.
 	vcs.ViewChangeMsgLogs.ViewChangeMsgMutex.Lock()
@@ -98,30 +98,19 @@ func (vcs *VCState) GetViewChangeMsgs() map[string]*ViewChangeMsg {
 
 func (vcs *VCState) verifyVCMsg(nodeID string, nextViewID int64, stableCheckPoint int64) error {
 	// Wrong view. That is, wrong configurations of peers to start the consensus.
-	if vcs.NodeID != nodeID {
-		return fmt.Errorf("vcs.NodeID = %d, nodeId = %d", vcs.NodeID, nodeID)
-	}
-
-	if vcs.NextViewID != nextViewID {
-		return fmt.Errorf("vcs.NextViewID = %d, nextViewID = %d", vcs.NextViewID, nextViewID)
-	}
-
-	// Check digest.
-	if vcs.StableCheckPoint != stableCheckPoint {
-		return fmt.Errorf("vcs.StableCheckPoint = %s, stableCheckPoint = %s", vcs.StableCheckPoint, stableCheckPoint)
-	}
+	// TODO vertify sender's signature
 
 	return nil
 }
 
-func (state *State) ClearMsgLogs(min_s int64, max_s int64) {
+func (state *State) ClearMsgLogs() {
 	// intialize anything of MsgLogs but request and reply
 	state.MsgLogs.PrePrepareMsg = nil
-	for _, prepareMsg range state.MsgLogs.PrepareMsgs {
-		prepareMsg = nil
+	for seq, _ := range state.MsgLogs.PrepareMsgs {
+		state.MsgLogs.PrepareMsgs[seq] = nil
 	}
-	for _, commitMsg range state.MsgLogs.CommitMsgs {
-		commitMsg = nil
+	for seq, _ := range state.MsgLogs.CommitMsgs {
+		state.MsgLogs.CommitMsgs[seq] = nil
 	}
 	state.MsgLogs.TotalPrepareMsg = 0
 	state.MsgLogs.TotalCommitMsg = 0

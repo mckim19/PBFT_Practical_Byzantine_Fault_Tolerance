@@ -18,7 +18,12 @@ type PBFT interface {
 	GetPrepareMsgs() map[string]*VoteMsg
 	GetCommitMsgs() map[string]*VoteMsg
 	GetSuccChkPoint() int64
+
 	SetSuccChkPoint(int64)
+	SetReqMsg(request *RequestMsg)
+	SetPrePrepareMsg(prePrepareMsg *PrePrepareMsg)
+	SetSequenceID(sequenceID int64)
+	SetDigest(digest string)
 
 	ClearMsgLogs()
 }

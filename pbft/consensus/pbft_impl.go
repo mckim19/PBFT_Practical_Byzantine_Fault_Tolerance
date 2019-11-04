@@ -218,7 +218,6 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 
 func (state *State) GetSequenceID() int64 {
 	return state.SequenceID
-
 }
 
 func (state *State) GetDigest() string {
@@ -244,12 +243,31 @@ func (state *State) GetReqMsg() *RequestMsg {
 func (state *State) GetPrePrepareMsg() *PrePrepareMsg {
 	return state.MsgLogs.PrePrepareMsg
 }
+
 func (state *State) GetSuccChkPoint() int64 {
 	return state.succChkPointDelete
 }
+
 func (state *State) SetSuccChkPoint(num int64) {
 	state.succChkPointDelete = num
 }
+
+func (state *State) SetReqMsg(request *RequestMsg) {
+	state.MsgLogs.ReqMsg = request
+}
+
+func (state *State) SetPrePrepareMsg(prePrepareMsg *PrePrepareMsg) {
+	state.MsgLogs.PrePrepareMsg = prePrepareMsg
+}
+
+func (state *State) SetDigest(digest string) {
+	state.digest = digest
+}
+
+func (state *State) SetSequenceID(sequenceID int64) {
+	state.SequenceID = sequenceID
+}
+
 func (state *State) GetPrepareMsgs() map[string]*VoteMsg {
 	newMap := make(map[string]*VoteMsg)
 
