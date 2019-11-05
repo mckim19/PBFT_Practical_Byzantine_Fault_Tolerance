@@ -24,6 +24,7 @@ type PBFT interface {
 	SetPrePrepareMsg(prePrepareMsg *PrePrepareMsg)
 	SetSequenceID(sequenceID int64)
 	SetDigest(digest string)
+	SetViewID(viewID int64)
 
 	ClearMsgLogs()
 }

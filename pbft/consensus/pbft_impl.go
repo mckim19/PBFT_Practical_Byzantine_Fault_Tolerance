@@ -268,6 +268,10 @@ func (state *State) SetDigest(digest string) {
 	state.digest = digest
 }
 
+func (state *State) SetViewID(viewID int64) {
+	state.ViewID = viewID
+}
+
 func (state *State) GetPrepareMsgs() map[string]*VoteMsg {
 	newMap := make(map[string]*VoteMsg)
 

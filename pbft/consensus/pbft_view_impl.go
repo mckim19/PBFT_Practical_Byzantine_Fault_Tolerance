@@ -106,6 +106,7 @@ func (vcs *VCState) verifyVCMsg(nodeID string, nextViewID int64, stableCheckPoin
 }
 
 func (state *State) ClearMsgLogs() {
+	fmt.Println("ClearMsgLogs()")
 	// intialize anything of MsgLogs but request and reply
 	state.MsgLogs.PrePrepareMsg = nil
 	for seq, _ := range state.MsgLogs.PrepareMsgs {
