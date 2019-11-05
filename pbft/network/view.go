@@ -147,37 +147,8 @@ func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
 	// Change View and Primary
 	node.updateView(newviewMsg.NextViewID)
 
-	// Currunt Max sequence number of committed request
-	var committedMax int64 = 0
- 	for seq, _ := range node.CommittedMsgs{
- 		fmt.Println(seq)
- 		if committedMax <= int64(seq) {
- 			committedMax = int64(seq)
- 		}
- 	}
-
-	fmt.Println(node.CommittedMsgs)
-	fmt.Println("newviewMsg.Min_S : ", newviewMsg.Min_S)
-	fmt.Println("newviewMsg.Max_S : ", newviewMsg.Max_S)
-
-	fmt.Println("committedMax : ", committedMax)
-
-	// min_s != max_s
-
-	// Create filling request and filling
-	for seq := int64(committedMax+1); seq <= newviewMsg.Max_S; seq++ {
-		fmt.Println("i : ", seq)
-		var request consensus.RequestMsg
-		request.SequenceID = seq
-		request.Operation = ""
-		request.Timestamp = int64(0)
-		request.Data = ""
-		request.ClientID = ""
-		node.CommittedMsgs = append(node.CommittedMsgs, &request)
-
-		atomic.AddInt64(&node.TotalConsensus, 1)
-	}
- 
+	// Fill missing states and messages
+ 	node.FillHole()
 
 	// Accept messages usign MsgEntrance channel
 	node.IsViewChanging = false
@@ -223,6 +194,70 @@ func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
 	}
 
 	return nil
+}
+
+func (node *Node) FillHole() {
+
+	// Check the number of states
+	fmt.Println("node.TotalConsensus :  ",node.TotalConsensus)
+
+	fmt.Println("newviewMsg.Min_S : ", newviewMsg.Min_S)
+	fmt.Println("newviewMsg.Max_S : ", newviewMsg.Max_S)
+
+	// Currunt Max sequence number of committed request
+	var committedMax int64 = 0
+ 	for seq, _ := range node.CommittedMsgs{
+ 		fmt.Println(seq)
+ 		if committedMax <= int64(seq) {
+ 			committedMax = int64(seq)
+ 		}
+ 	}
+	fmt.Println("committedMax : ", committedMax)
+
+	// Fill the PrePreparemsg from newview message
+	for seq, prePrepareMsg := range newviewMsg.SetPrePrepareMsgs {
+		fmt.Println("newview seq : ", seq)
+
+		node.StatesMutex.Lock()
+		var state consensus.PBFT
+		state, err := node.getState(seq)
+		if err != nil {
+			// Print error.
+			node.MsgError <- []error{err}
+		}
+		if state != nil {
+			// Fill the committedMax if it is not committed
+			if seq > committedMax 
+				node.CommittedMsgs = append(node.CommittedMsgs, state.GetReqMsg())
+			// Initalize all of logs of this state
+			state.ClearMsgLogs() 
+		} else { //if this node does not have state and a request with sequence number n (prePrepareMsg.SequenceID)
+			// Fill the state of the sequence number of prePrepareMsg
+			state := node.createState(0) 
+
+			state.SetSequenceID(prePrepareMsg.SequenceID)
+
+			// Log REQUEST message.
+			var request consensus.RequestMsg
+			request.SequenceID = seq
+			request.Operation = ""
+			request.Timestamp = int64(0)
+			request.Data = ""
+			request.ClientID = ""
+
+			state.SetReqMsg(request)
+		}
+
+		// Change the viewid, preprepare message and preprepare message's digest of the state
+		state.SetViewID(prePrepareMsg.ViewID)
+		state.SetPrePrepareMsg(prePrepareMsg)
+		state.SetDigest(prePrepareMsg.Digest)
+		node.States[prePrepareMsg.SequenceID] = state
+		node.StatesMutex.Unlock()
+	}
+
+
+	// min_s != max_s
 }
 
 func (node *Node) updateView(viewID int64) {

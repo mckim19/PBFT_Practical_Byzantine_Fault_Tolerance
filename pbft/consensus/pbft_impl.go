@@ -260,12 +260,12 @@ func (state *State) SetPrePrepareMsg(prePrepareMsg *PrePrepareMsg) {
 	state.MsgLogs.PrePrepareMsg = prePrepareMsg
 }
 
-func (state *State) SetDigest(digest string) {
-	state.digest = digest
-}
-
 func (state *State) SetSequenceID(sequenceID int64) {
 	state.SequenceID = sequenceID
+}
+
+func (state *State) SetDigest(digest string) {
+	state.digest = digest
 }
 
 func (state *State) GetPrepareMsgs() map[string]*VoteMsg {
