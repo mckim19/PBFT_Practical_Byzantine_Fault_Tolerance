@@ -68,6 +68,8 @@ type NewViewMsg struct {
 	SetPrePrepareMsgs map[int64]*PrePrepareMsg `json:"setPrepreparemsgs"`
 	//O a set of PrePrepareMsgs from latest stable checkpoint(min-s) in V to the highest sequence number(max-s) in a PrepareMsg in V
 	// new Primary creates a new PrePrepareMsg for view v+1 for each sequence number between min-s and max-s
+	Max_S int64 `json:"max_s"`
+	Min_S int64 `json:"min_s"`
 }
 
 type SignatureMsg struct {

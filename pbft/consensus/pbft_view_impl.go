@@ -78,6 +78,8 @@ func (vcs *VCState) ViewChange(viewchangeMsg *ViewChangeMsg) (*NewViewMsg, error
 			NodeID: vcs.NodeID,
 			SetViewChangeMsgs: vcs.GetViewChangeMsgs(),
 			SetPrePrepareMsgs: nil,
+			Max_S: 0,
+			Min_S: 0,
 		}, nil
 	}
 

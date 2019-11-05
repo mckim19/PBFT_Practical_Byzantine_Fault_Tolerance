@@ -67,7 +67,12 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 	node.updateView(newViewMsg.NextViewID)
 
 	// Fill all the fields of NEW-VIEW message.
-	var max_s int64 = node.fillNewViewMsg(newViewMsg)
+	var max_s int64
+	var min_s int64
+	max_s, min_s  = node.fillNewViewMsg(newViewMsg)
+
+	newViewMsg.Max_S = max_s
+	newViewMsg.Min_S = min_s
 
 	for i := node.StableCheckPoint + 1; i <= max_s; i++ {
 		fmt.Println("************************************************************************")
@@ -82,7 +87,7 @@ func (node *Node) GetViewChange(viewchangeMsg *consensus.ViewChangeMsg) {
 
 }
 
-func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) int64 {
+func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) (int64, int64){
 	// Search min_s the sequence number of the latest stable checkpoint and
 	// max_s the highest sequence number in a prepare message in V.
 	var min_s int64 = 0
@@ -125,7 +130,7 @@ func (node *Node) fillNewViewMsg(newViewMsg *consensus.NewViewMsg) int64 {
 	}
 	newViewMsg.SetPrePrepareMsgs = newMap
 
-	return max_s
+	return max_s, min_s
 }
 
 func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
@@ -141,6 +146,38 @@ func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
 
 	// Change View and Primary
 	node.updateView(newviewMsg.NextViewID)
+
+	// Currunt Max sequence number of committed request
+	var committedMax int64 = 0
+ 	for seq, _ := range node.CommittedMsgs{
+ 		fmt.Println(seq)
+ 		if committedMax <= int64(seq) {
+ 			committedMax = int64(seq)
+ 		}
+ 	}
+
+	fmt.Println(node.CommittedMsgs)
+	fmt.Println("newviewMsg.Min_S : ", newviewMsg.Min_S)
+	fmt.Println("newviewMsg.Max_S : ", newviewMsg.Max_S)
+
+	fmt.Println("committedMax : ", committedMax)
+
+	// min_s != max_s
+
+	// Create filling request and filling
+	for seq := int64(committedMax+1); seq <= newviewMsg.Max_S; seq++ {
+		fmt.Println("i : ", seq)
+		var request consensus.RequestMsg
+		request.SequenceID = seq
+		request.Operation = ""
+		request.Timestamp = int64(0)
+		request.Data = ""
+		request.ClientID = ""
+		node.CommittedMsgs = append(node.CommittedMsgs, &request)
+
+		atomic.AddInt64(&node.TotalConsensus, 1)
+	}
+ 
 
 	// Accept messages usign MsgEntrance channel
 	node.IsViewChanging = false

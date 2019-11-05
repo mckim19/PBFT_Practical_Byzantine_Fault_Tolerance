@@ -70,7 +70,7 @@ type MsgOut struct {
 const NumResolveMsgGo = 6
 
 // Deadline for the consensus state.
-const ConsensusDeadline = time.Millisecond * 100
+const ConsensusDeadline = time.Millisecond * 70
 
 // Cooling time to escape frequent error, or message sending retry.
 const CoolingTime = time.Millisecond * 2
@@ -143,6 +143,11 @@ func (node *Node) Broadcast(msg interface{}, path string) {
 // When REQUEST message is broadcasted, start consensus.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) {
 	LogMsg(reqMsg)
+
+	if node.IsViewChanging == true {
+		return
+	}
+
 	// Create a new state object.
 	state := node.createState(reqMsg.Timestamp)
 
@@ -223,6 +228,7 @@ func (node *Node) startTransitionWithDeadline(state consensus.PBFT, timeStamp in
 				node.IsViewChanging = true
 				// Broadcast view change message.
 				node.MsgError <- []error{ctx.Err()}
+				fmt.Printf("&&&&&&&&&&&&&&&&&&& state.GetSequenceID %d &&&&&&&&&&&&&&&&&&\n",state.GetSequenceID())
 				node.StartViewChange()
 			}
 			return
