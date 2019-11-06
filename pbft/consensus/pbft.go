@@ -27,4 +27,5 @@ type PBFT interface {
 	SetViewID(viewID int64)
 
 	ClearMsgLogs()
+	Redo_SetState(viewID int64, nodeID string, totNodes int, preprepareMsg *PrePrepareMsg, digest string) *State
 }

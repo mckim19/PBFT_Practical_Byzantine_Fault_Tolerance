@@ -106,7 +106,6 @@ func (vcs *VCState) verifyVCMsg(nodeID string, nextViewID int64, stableCheckPoin
 }
 
 func (state *State) ClearMsgLogs() {
-	fmt.Println("ClearMsgLogs()")
 	// intialize anything of MsgLogs but request and reply
 	state.MsgLogs.PrePrepareMsg = nil
 	for seq, _ := range state.MsgLogs.PrepareMsgs {
@@ -118,4 +117,20 @@ func (state *State) ClearMsgLogs() {
 	state.MsgLogs.TotalPrepareMsg = 0
 	state.MsgLogs.TotalCommitMsg = 0
 	state.MsgLogs.commitMsgSent = 0
+}
+
+func (state *State) Redo_SetState(viewID int64, nodeID string, totNodes int, preprepareMsg *PrePrepareMsg, digest string) *State {
+	state.ViewID = viewID
+	state.NodeID = nodeID
+	state.MsgLogs.PrePrepareMsg = preprepareMsg
+	state.MsgLogs.TotalPrepareMsg = 0
+	state.MsgLogs.TotalCommitMsg = 0
+	state.MsgLogs.commitMsgSent = 0
+	state.MsgLogs.replyMsgSent = 0
+
+	state.F = (totNodes - 1) / 3
+	state.succChkPointDelete = 0
+	state.digest = digest
+
+	return state
 }

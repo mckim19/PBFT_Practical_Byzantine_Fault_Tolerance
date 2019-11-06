@@ -157,7 +157,11 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 				break
 			}
 			_ = json.Unmarshal(marshalledMsg, &msg)
-			server.node.MsgEntrance <- &msg
+			if !server.node.IsViewChanging {
+				server.node.MsgEntrance <- &msg
+			} else {
+				server.node.ViewMsgEntrance <- &msg
+			}
 		case "/commit":
 			var msg consensus.VoteMsg
 			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
@@ -165,7 +169,11 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 				break
 			}
 			_ = json.Unmarshal(marshalledMsg, &msg)
-			server.node.MsgEntrance <- &msg
+			if !server.node.IsViewChanging {
+				server.node.MsgEntrance <- &msg
+			} else {
+				server.node.ViewMsgEntrance <- &msg
+			}
 		case "/reply":
 			var msg consensus.ReplyMsg
 			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
@@ -173,7 +181,11 @@ func (server *Server) receiveLoop(c *websocket.Conn, path string, nodeInfo *Node
 				break
 			}
 			_ = json.Unmarshal(marshalledMsg, &msg)
-			server.node.MsgEntrance <- &msg
+			if !server.node.IsViewChanging {
+				server.node.MsgEntrance <- &msg
+			} else {
+				server.node.ViewMsgEntrance <- &msg
+			}
 		case "/checkpoint":
 			var msg consensus.CheckPointMsg
 			marshalledMsg, err, ok = deattachSignatureMsg(message, nodeInfo.PubKey)
