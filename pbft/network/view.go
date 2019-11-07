@@ -151,15 +151,15 @@ func (node *Node) GetNewView(newviewMsg *consensus.NewViewMsg) error {
 	node.updateView(newviewMsg.NextViewID)
 
 	// Fill missing states and messages
- 	node.FillHole(newviewMsg)
+	node.FillHole(newviewMsg)
 
- 	/* 
- 	for _, prePrepareMsg := NewViewMsg.SetPrePrepareMsgs {
- 		var state consensus.PBFT
- 		state, _ = node.getState(prePrepareMsg.SequenceID)
- 		node.GetPrepareMsgs(state, prePrepareMsg)
- 	}
-	*/
+	/*// Redo
+	for _, prePrepareMsg := NewViewMsg.SetPrePrepareMsgs {
+		var state consensus.PBFT
+		state, _ = node.getState(prePrepareMsg.SequenceID)
+		node.GetPrePrepareMsgs(state, prePrepareMsg)
+	}
+	*///
 	// Accept messages usign MsgEntrance channel
 	node.IsViewChanging = false
 
@@ -181,11 +181,11 @@ func (node *Node) FillHole(newviewMsg *consensus.NewViewMsg) {
 
 	// Currunt Max sequence number of committed request
 	var committedMax int64 = 0
- 	for seq, _ := range node.CommittedMsgs{
- 		if committedMax <= int64(seq+1) {
- 			committedMax = int64(seq+1)
- 		}
- 	}
+	for seq, _ := range node.CommittedMsgs{
+		if committedMax <= int64(seq+1) {
+			committedMax = int64(seq+1)
+		}
+	}
 	fmt.Println("committedMax : ", committedMax)
 
 	// if highest sequence number of received request and state is lower than min-s,
@@ -199,9 +199,10 @@ func (node *Node) FillHole(newviewMsg *consensus.NewViewMsg) {
 		fmt.Println("newview seq : ", seq)
 
 		// preprepare.sequenceID could be higher than Max_S of SetPrePare
-		if seq > newviewMsg.Max_S {
-			continue
-		}
+		//if seq > newviewMsg.Max_S {
+
+		//	continue
+		//}
 
 		// node.StatesMutex.Lock()
 		var state consensus.PBFT
@@ -223,7 +224,7 @@ func (node *Node) FillHole(newviewMsg *consensus.NewViewMsg) {
 
 		} else { //if this node does not have state and a request with sequence number n (prePrepareMsg.SequenceID)
 			// Fill the state of the sequence number of prePrepareMsg
-			state := node.createState(0) 
+			state := node.createState(0)
 
 			state.SetSequenceID(prePrepareMsg.SequenceID)
 			// Log REQUEST message.
@@ -235,9 +236,11 @@ func (node *Node) FillHole(newviewMsg *consensus.NewViewMsg) {
 			request.ClientID = ""
 			state.SetReqMsg(&request)
 
+			// Fill request message in the committedMax
+			node.CommittedMsgs = append(node.CommittedMsgs, state.GetReqMsg())
 			// Change the viewid, preprepare message and preprepare message's digest of the state
 			node.States[seq] = state.Redo_SetState(newviewMsg.NextViewID, node.MyInfo.NodeID, len(node.NodeTable), prePrepareMsg, prePrepareMsg.Digest)
-			
+
 			atomic.AddInt64(&node.TotalConsensus, 1)
 		}
 		//node.StatesMutex.Unlock()

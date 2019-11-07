@@ -70,7 +70,7 @@ type MsgOut struct {
 const NumResolveMsgGo = 6
 
 // Deadline for the consensus state.
-const ConsensusDeadline = time.Millisecond * 70
+const ConsensusDeadline = time.Millisecond * 100
 
 // Cooling time to escape frequent error, or message sending retry.
 const CoolingTime = time.Millisecond * 2
